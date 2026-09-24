@@ -1,3 +1,7 @@
+
+## O Reviu é um aplicativo mobile voltado para estudantes. 
+A proposta é ajudar o usuário a estudar de forma mais eficaz e divertida por meio de questionários personalizados, revisão de conteúdos e acompanhamento do progresso. No primeiro acesso, o usuário responderá a algumas perguntas sobre seus objetivos e hábitos de estudo. Com essas informações, o aplicativo poderá oferecer uma experiência mais personalizada, ajudando cada pessoa a organizar melhor seus estudos e aprender no seu próprio ritmo.
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).

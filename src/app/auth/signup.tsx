@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const fields = [
 	{ key: 'name', placeholder: 'Digite seu nome', icon: require('@/assets/images/onboarding/name.png'), secure: false },
 	{ key: 'email', placeholder: 'Digite seu email', icon: require('@/assets/images/onboarding/email.png'), secure: false },
-	{ key: 'phone', placeholder: 'Digite seu telefone', icon: require('@/assets/images/onboarding/phone.png'), secure: false },
 	{ key: 'password', placeholder: 'Digite sua senha', icon: require('@/assets/images/onboarding/password.png'), secure: true },
 	{ key: 'passwordConfirmation', placeholder: 'Digite sua senha novamente', icon: require('@/assets/images/onboarding/password.png'), secure: true },
 ] as const;
@@ -49,7 +48,7 @@ export default function SignupScreen() {
 							<TextInput
 								accessibilityLabel={field.placeholder}
 								autoCapitalize={field.key === 'email' ? 'none' : 'sentences'}
-								keyboardType={field.key === 'email' ? 'email-address' : field.key === 'phone' ? 'phone-pad' : 'default'}
+								keyboardType={field.key === 'email' ? 'email-address' : 'default'}
 								onChangeText={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
 								placeholder={field.placeholder}
 								placeholderTextColor="rgba(0, 0, 0, 0.5)"

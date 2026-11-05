@@ -1,6 +1,16 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+	KeyboardAvoidingView,
+	Platform,
+	Pressable,
+	ScrollView,
+	StyleSheet,
+	Text,
+	TextInput,
+	useWindowDimensions,
+	View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polygon } from 'react-native-svg';
 
@@ -11,7 +21,21 @@ const colors = {
 	yellow: '#FFD33D',
 	pink: '#FF3B78',
 	green: '#18D09C',
+	lilac: '#F0E7FF',
 };
+
+const themeColors = [
+	'#FFC93A',
+	'#FF3B8B',
+	'#12B886',
+	'#E0293F',
+	'#8A3FFC',
+	'#00CFFF',
+	'#FF9500',
+	'#FF7070',
+	'#238636',
+	'#009B77',
+];
 
 type Shape = { fill: string; points: string };
 
@@ -77,25 +101,122 @@ const italianShapes: Shape[] = [
 	{ fill: '#0F9C70', points: '84,-5 105,-5 105,105 76,105' },
 ];
 
+type CreateDeckModalProps = {
+	onClose: () => void;
+	onCreate: (name: string, color: string) => void;
+	top: number;
+};
+
+function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
+	const [name, setName] = useState('');
+	const [selected, setSelected] = useState<string | null>(null);
+
+	const canCreate = name.trim().length > 0 && selected !== null;
+	const rows = [themeColors.slice(0, 5), themeColors.slice(5, 10)];
+
+	return (
+		<KeyboardAvoidingView
+			behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+			pointerEvents="box-none"
+			style={styles.overlay}
+		>
+			{/* Toque fora do cartão fecha o modal */}
+			<Pressable accessibilityLabel="Fechar" onPress={onClose} style={StyleSheet.absoluteFill} />
+
+			<View style={[styles.modalCard, { top }]}>
+				{/* Círculo lilás decorativo no fundo do cartão */}
+				<View pointerEvents="none" style={styles.modalCircle} />
+
+				<Pressable
+					accessibilityLabel="Fechar"
+					accessibilityRole="button"
+					hitSlop={12}
+					onPress={onClose}
+					style={styles.closeButton}
+				>
+					<View style={[styles.closeLine, { transform: [{ rotate: '45deg' }] }]} />
+					<View style={[styles.closeLine, { transform: [{ rotate: '-45deg' }] }]} />
+				</Pressable>
+
+				<Text style={styles.modalLabel}>Digite o nome do deck</Text>
+				<TextInput
+					maxLength={30}
+					onChangeText={setName}
+					selectionColor={colors.blue}
+					style={styles.input}
+					value={name}
+				/>
+
+				<Text style={[styles.modalLabel, styles.themeLabel]}>Escolha o tema do deck</Text>
+				<View style={styles.swatches}>
+					{rows.map((row, rowIndex) => (
+						<View key={rowIndex} style={styles.swatchRow}>
+							{row.map((color) => {
+								const isSelected = selected === color;
+								return (
+									<Pressable
+										accessibilityLabel={`Tema ${color}`}
+										accessibilityRole="button"
+										accessibilityState={{ selected: isSelected }}
+										key={color}
+										onPress={() => setSelected(color)}
+										style={[
+											styles.swatch,
+											{ backgroundColor: color },
+											isSelected && styles.swatchSelected,
+										]}
+									/>
+								);
+							})}
+						</View>
+					))}
+				</View>
+
+				<Pressable
+					accessibilityRole="button"
+					onPress={() => {
+						if (canCreate && selected) onCreate(name.trim(), selected);
+					}}
+					style={({ pressed }) => [
+						styles.modalButton,
+						!canCreate && styles.modalButtonDisabled,
+						pressed && canCreate && styles.pressed,
+					]}
+				>
+					<Text style={styles.modalButtonText}>Criar deck</Text>
+				</Pressable>
+			</View>
+		</KeyboardAvoidingView>
+	);
+}
+
 export default function DecksScreen() {
 	const insets = useSafeAreaInsets();
 	const { height: screenH, width: screenW } = useWindowDimensions();
 	const circleSize = 2800;
+	const [modalVisible, setModalVisible] = useState(false);
+
+	const handleCreate = (name: string, color: string) => {
+		// TODO: salvar o novo deck (estado global, API ou banco local)
+		console.log('Criar deck', { color, name });
+		setModalVisible(false);
+	};
+
 	return (
 		<View style={styles.screen}>
 			<View
-	pointerEvents="none"
-	style={[
-		styles.backgroundShape,
-		{
-			borderRadius: circleSize / 2,
-			height: circleSize,
-			left: screenW * 0.37,
-			top: screenH * 0.45 - circleSize / 2,
-			width: circleSize,
-		},
-	]}
-/>
+				pointerEvents="none"
+				style={[
+					styles.backgroundShape,
+					{
+						borderRadius: circleSize / 2,
+						height: circleSize,
+						left: screenW * 0.37,
+						top: screenH * 0.45 - circleSize / 2,
+						width: circleSize,
+					},
+				]}
+			/>
 			<ScrollView
 				bounces={false}
 				contentContainerStyle={[
@@ -148,11 +269,20 @@ export default function DecksScreen() {
 
 				<Pressable
 					accessibilityRole="button"
+					onPress={() => setModalVisible(true)}
 					style={({ pressed }) => [styles.createButton, pressed && styles.pressed]}
 				>
 					<Text style={styles.createButtonText}>Criar novo deck</Text>
 				</Pressable>
 			</ScrollView>
+
+			{modalVisible && (
+				<CreateDeckModal
+					onClose={() => setModalVisible(false)}
+					onCreate={handleCreate}
+					top={screenH * 0.26}
+				/>
+			)}
 		</View>
 	);
 }
@@ -162,13 +292,8 @@ const styles = StyleSheet.create({
 
 	backgroundShape: {
 		backgroundColor: colors.shape,
-		borderRadius: 500,
-		height: 900,
-		left: 150,
 		opacity: 0.9,
 		position: 'absolute',
-		top: -100,
-		width: 600,
 	},
 
 	content: { flexGrow: 1, paddingHorizontal: 16 },
@@ -264,4 +389,88 @@ const styles = StyleSheet.create({
 	},
 	createButtonText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 	pressed: { opacity: 0.75 },
+
+	// ---------- Modal ----------
+	// elevation/zIndex altos para ficar acima dos cards (que têm elevation no Android)
+	overlay: {
+		bottom: 0,
+		elevation: 20,
+		left: 0,
+		position: 'absolute',
+		right: 0,
+		top: 0,
+		zIndex: 20,
+	},
+	modalCard: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 26,
+		elevation: 24,
+		left: 36,
+		overflow: 'hidden',
+		paddingBottom: 22,
+		paddingHorizontal: 16,
+		paddingTop: 16,
+		position: 'absolute',
+		right: 36,
+		shadowColor: '#000',
+		shadowOffset: { height: 6, width: 0 },
+		shadowOpacity: 0.25,
+		shadowRadius: 8,
+	},
+	modalCircle: {
+		backgroundColor: colors.lilac,
+		borderRadius: 220,
+		bottom: -200,
+		height: 440,
+		left: -170,
+		position: 'absolute',
+		width: 440,
+	},
+	closeButton: { alignItems: 'center', height: 28, justifyContent: 'center', width: 28 },
+	closeLine: {
+		backgroundColor: colors.blue,
+		borderRadius: 2,
+		height: 3.5,
+		position: 'absolute',
+		width: 24,
+	},
+	modalLabel: { color: colors.ink, fontSize: 18, fontWeight: '800', marginTop: 14 },
+	input: {
+		backgroundColor: '#FFFFFF',
+		borderColor: '#A9A9B8',
+		borderRadius: 10,
+		borderWidth: 1,
+		color: colors.ink,
+		fontSize: 16,
+		height: 42,
+		marginTop: 12,
+		paddingHorizontal: 12,
+	},
+	themeLabel: { marginTop: 22 },
+	swatches: { marginTop: 16, rowGap: 14 },
+	swatchRow: { flexDirection: 'row', justifyContent: 'space-between' },
+	swatch: {
+		borderColor: 'transparent',
+		borderRadius: 22,
+		borderWidth: 3,
+		height: 44,
+		width: 44,
+	},
+	swatchSelected: { borderColor: colors.ink },
+	modalButton: {
+		alignItems: 'center',
+		alignSelf: 'stretch',
+		backgroundColor: colors.yellow,
+		borderRadius: 10,
+		elevation: 3,
+		height: 40,
+		justifyContent: 'center',
+		marginTop: 28,
+		shadowColor: '#B58B00',
+		shadowOffset: { height: 2, width: 0 },
+		shadowOpacity: 0.35,
+		shadowRadius: 2,
+	},
+	modalButtonDisabled: { opacity: 0.55 },
+	modalButtonText: { color: colors.ink, fontSize: 15, fontWeight: '800' },
 });

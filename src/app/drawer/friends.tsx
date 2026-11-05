@@ -1,5 +1,18 @@
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import LottieView from 'lottie-react-native';
+import { useState } from 'react';
+import {
+	KeyboardAvoidingView,
+	Modal,
+	Platform,
+	Pressable,
+	ScrollView,
+	StyleSheet,
+	Text,
+	TextInput,
+	useWindowDimensions,
+	View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const colors = {
@@ -60,14 +73,87 @@ function FriendRow({ friend }: { friend: Friend }) {
 	);
 }
 
+function AddFriendModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+	const [username, setUsername] = useState('');
+	const [requestSent, setRequestSent] = useState(false);
+
+	const closeModal = () => {
+		setUsername('');
+		setRequestSent(false);
+		onClose();
+	};
+
+	return (
+		<Modal animationType="fade" transparent visible={visible} onRequestClose={closeModal}>
+			<KeyboardAvoidingView
+				behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+				style={styles.modalBackdrop}
+			>
+				<Pressable accessibilityLabel="Fechar" accessibilityRole="button" onPress={closeModal} style={styles.modalDismissArea} />
+
+				<View style={styles.modalCard}>
+					<View pointerEvents="none" style={styles.modalCircle} />
+
+					<Pressable
+						accessibilityLabel="Fechar adicionar amigo"
+						accessibilityRole="button"
+						onPress={closeModal}
+						style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+					>
+						<View style={styles.closeLineOne} />
+						<View style={styles.closeLineTwo} />
+					</Pressable>
+
+					<LottieView
+						autoPlay
+						loop
+						resizeMode="cover"
+						source={require('@/assets/lotties/friends.json')}
+						style={styles.friendIllustrationAnimation}
+					/>
+
+					<Text style={styles.inputLabel}>Digite o username do seu amigo</Text>
+
+					<TextInput
+						autoCapitalize="none"
+						autoCorrect={false}
+						onChangeText={(value) => {
+							setUsername(value);
+							setRequestSent(false);
+						}}
+						returnKeyType="done"
+						style={styles.usernameInput}
+						value={username}
+					/>
+
+					<Pressable
+						accessibilityRole="button"
+						disabled={!username.trim()}
+						onPress={() => setRequestSent(true)}
+						style={({ pressed }) => [
+							styles.sendButton,
+							!username.trim() && styles.sendButtonDisabled,
+							pressed && styles.pressed,
+						]}
+					>
+						<Text style={styles.sendButtonText}>
+							{requestSent ? 'Solicitação enviada!' : 'Enviar solicitação de amizade'}
+						</Text>
+					</Pressable>
+				</View>
+			</KeyboardAvoidingView>
+		</Modal>
+	);
+}
+
 export default function FriendsScreen() {
+	const [isAddFriendVisible, setIsAddFriendVisible] = useState(false);
 	const insets = useSafeAreaInsets();
 	const { height: screenH, width: screenW } = useWindowDimensions();
 	const curveSize = 1400;
 
 	return (
 		<View style={styles.screen}>
-			
 			<View
 				pointerEvents="none"
 				style={[
@@ -103,6 +189,7 @@ export default function FriendsScreen() {
 					<Pressable
 						accessibilityLabel="Adicionar amigo"
 						accessibilityRole="button"
+						onPress={() => setIsAddFriendVisible(true)}
 						style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
 					>
 						<View style={styles.plusHorizontal} />
@@ -123,6 +210,8 @@ export default function FriendsScreen() {
 					))}
 				</View>
 			</ScrollView>
+
+			<AddFriendModal visible={isAddFriendVisible} onClose={() => setIsAddFriendVisible(false)} />
 		</View>
 	);
 }
@@ -221,4 +310,73 @@ const styles = StyleSheet.create({
 	},
 	badgeText: { color: '#111111', fontSize: 12, fontWeight: '800' },
 	badgePlaceholder: { height: 22 },
+
+	modalBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(21, 21, 21, 0.32)',
+		flex: 1,
+		justifyContent: 'center',
+		padding: 16,
+	},
+	modalDismissArea: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
+	modalCard: {
+		backgroundColor: colors.blue,
+		borderRadius: 24,
+		elevation: 8,
+		maxWidth: 420,
+		overflow: 'hidden',
+		padding: 16,
+		shadowColor: '#000000',
+		shadowOpacity: 0.22,
+		shadowRadius: 12,
+		width: '100%',
+	},
+	modalCircle: {
+	backgroundColor: '#4A5FC1',
+	borderRadius: 260,
+	height: 520,
+	position: 'absolute',
+	right: -300,
+	top: -70,
+	width: 520,
+},
+	closeButton: { height: 28, justifyContent: 'center', width: 28 },
+	closeLineOne: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 2,
+		height: 3,
+		position: 'absolute',
+		transform: [{ rotate: '45deg' }],
+		width: 20,
+	},
+	closeLineTwo: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 2,
+		height: 3,
+		position: 'absolute',
+		transform: [{ rotate: '-45deg' }],
+		width: 20,
+	},
+	friendIllustrationAnimation: { alignSelf: 'center', height: 170, marginTop: 4, width: '100%' },
+	inputLabel: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginTop: 24 },
+	usernameInput: {
+		backgroundColor: '#D9D9D9',
+		borderRadius: 10,
+		color: colors.ink,
+		fontSize: 16,
+		height: 40,
+		marginTop: 12,
+		paddingHorizontal: 12,
+	},
+	sendButton: {
+		alignItems: 'center',
+		backgroundColor: '#FFD43B',
+		borderRadius: 10,
+		height: 36,
+		justifyContent: 'center',
+		marginTop: 12,
+		paddingHorizontal: 8,
+	},
+	sendButtonDisabled: { opacity: 0.55 },
+	sendButtonText: { color: '#111111', fontSize: 13, fontWeight: '800', textAlign: 'center' },
 });

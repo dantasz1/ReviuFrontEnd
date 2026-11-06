@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
 	ActivityIndicator,
+	Alert,
 	KeyboardAvoidingView,
+	Modal,
 	Platform,
 	Pressable,
 	ScrollView,
@@ -15,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polygon } from 'react-native-svg';
-import { createDeck, getDecks, type Deck } from '../../../services/decks';
+import { createDeck, deleteDeck, getDecks, updateDeck, type Deck } from '../../../services/decks';
 
 const DECK_COLORS_KEY = 'deckColors';
 
@@ -23,10 +26,12 @@ const colors = {
 	blue: '#3975F6',
 	shape: '#536BCB',
 	ink: '#111111',
+	muted: '#5A5A66',
 	yellow: '#FFD33D',
 	pink: '#FF3B78',
 	green: '#18D09C',
 	lilac: '#F0E7FF',
+	danger: '#E0293F',
 };
 
 const themeColors = [
@@ -52,6 +57,19 @@ function adjustColor(color: string, factor: number) {
 	return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
+
+function normalize(text: string) {
+	return text
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.trim();
+}
+
+function messageOf(error: unknown, fallback: string) {
+	return error instanceof Error ? error.message : fallback;
+}
+
 type DeckCardProps = {
 	accent: string;
 	count: string;
@@ -59,20 +77,28 @@ type DeckCardProps = {
 	shapes: Shape[];
 	width: `${number}%`;
 	first?: boolean;
+	onPress: () => void;
+	onLongPress: () => void;
 };
 
-function DeckCard({ accent, count, name, shapes, width, first }: DeckCardProps) {
+function DeckCard({ accent, count, name, shapes, width, first, onPress, onLongPress }: DeckCardProps) {
 	const [size, setSize] = useState({ height: 0, width: 0 });
 
 	return (
-		<View
+		<Pressable
+			accessibilityHint="Segure para renomear ou excluir"
+			accessibilityLabel={`Abrir deck ${name}`}
+			accessibilityRole="button"
 			onLayout={(event) => {
 				const { height, width: w } = event.nativeEvent.layout;
 				setSize({ height, width: w });
 			}}
-			style={[
+			onLongPress={onLongPress}
+			onPress={onPress}
+			style={({ pressed }) => [
 				styles.deckCard,
 				{ backgroundColor: accent, width, marginTop: first ? 0 : -26 },
+				pressed && { opacity: 0.9 },
 			]}
 		>
 			{size.width > 0 && (
@@ -91,7 +117,7 @@ function DeckCard({ accent, count, name, shapes, width, first }: DeckCardProps) 
 			)}
 			<Text style={styles.deckName}>{name}</Text>
 			<Text style={styles.deckCount}>{count}</Text>
-		</View>
+		</Pressable>
 	);
 }
 
@@ -148,11 +174,11 @@ function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
 			pointerEvents="box-none"
 			style={styles.overlay}
 		>
-			{/* Toque fora do cartão fecha o modal */}
+			
 			<Pressable accessibilityLabel="Fechar" onPress={onClose} style={StyleSheet.absoluteFill} />
 
 			<View style={[styles.modalCard, { top }]}>
-				{/* Círculo lilás decorativo no fundo do cartão */}
+				
 				<View pointerEvents="none" style={styles.modalCircle} />
 
 				<Pressable
@@ -218,13 +244,142 @@ function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
 	);
 }
 
+
+type DeckOptionsModalProps = {
+	deck: Deck | null;
+	onClose: () => void;
+	onRename: (deck: Deck, name: string) => Promise<void>;
+	onDelete: (deck: Deck) => void;
+};
+
+function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModalProps) {
+	const [mode, setMode] = useState<'menu' | 'rename'>('menu');
+	const [name, setName] = useState('');
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState('');
+
+	
+	useEffect(() => {
+		if (deck) {
+			setMode('menu');
+			setName(deck.name);
+			setError('');
+			setSaving(false);
+		}
+	}, [deck]);
+
+	if (!deck) return null;
+
+	const canSave = name.trim().length > 0 && name.trim() !== deck.name && !saving;
+
+	const handleSave = async () => {
+		if (!canSave) return;
+		setSaving(true);
+		setError('');
+		try {
+			await onRename(deck, name.trim());
+			onClose();
+		} catch (e) {
+			setError(messageOf(e, 'Não foi possível renomear o deck.'));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<Modal animationType="fade" onRequestClose={onClose} transparent visible>
+			<KeyboardAvoidingView
+				behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+				style={styles.optionsBackdrop}
+			>
+				<Pressable accessibilityLabel="Fechar" onPress={onClose} style={StyleSheet.absoluteFill} />
+
+				<View style={styles.optionsCard}>
+					<Text numberOfLines={1} style={styles.optionsTitle}>
+						{deck.name}
+					</Text>
+
+					{mode === 'menu' ? (
+						<>
+							<Pressable
+								accessibilityRole="button"
+								onPress={() => setMode('rename')}
+								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
+							>
+								<Text style={styles.optionText}>Renomear</Text>
+							</Pressable>
+
+							<Pressable
+								accessibilityRole="button"
+								onPress={() => onDelete(deck)}
+								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
+							>
+								<Text style={[styles.optionText, { color: colors.danger }]}>Excluir deck</Text>
+							</Pressable>
+
+							<Pressable accessibilityRole="button" onPress={onClose} style={styles.cancelButton}>
+								<Text style={styles.cancelText}>Cancelar</Text>
+							</Pressable>
+						</>
+					) : (
+						<>
+							<Text style={styles.optionsLabel}>Novo nome do deck</Text>
+							<TextInput
+								autoFocus
+								editable={!saving}
+								maxLength={30}
+								onChangeText={(value) => {
+									setName(value);
+									setError('');
+								}}
+								onSubmitEditing={handleSave}
+								returnKeyType="done"
+								selectionColor={colors.blue}
+								style={styles.input}
+								value={name}
+							/>
+
+							{error ? <Text style={styles.optionsError}>{error}</Text> : null}
+
+							<Pressable
+								accessibilityRole="button"
+								disabled={!canSave}
+								onPress={handleSave}
+								style={({ pressed }) => [
+									styles.modalButton,
+									!canSave && styles.modalButtonDisabled,
+									pressed && canSave && styles.pressed,
+								]}
+							>
+								<Text style={styles.modalButtonText}>{saving ? 'Salvando...' : 'Salvar'}</Text>
+							</Pressable>
+
+							<Pressable
+								accessibilityRole="button"
+								onPress={() => setMode('menu')}
+								style={styles.cancelButton}
+							>
+								<Text style={styles.cancelText}>Voltar</Text>
+							</Pressable>
+						</>
+					)}
+				</View>
+			</KeyboardAvoidingView>
+		</Modal>
+	);
+}
+
 export default function DecksScreen() {
+	const router = useRouter();
 	const insets = useSafeAreaInsets();
 	const { height: screenH, width: screenW } = useWindowDimensions();
 	const circleSize = 2800;
+	const searchRef = useRef<ComponentRef<typeof TextInput>>(null);
 	const [modalVisible, setModalVisible] = useState(false);
+	const [optionsDeck, setOptionsDeck] = useState<Deck | null>(null);
 	const [decks, setDecks] = useState<Deck[]>([]);
 	const [deckColors, setDeckColors] = useState<Record<string, string>>({});
+	const [search, setSearch] = useState('');
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState('');
 
@@ -233,19 +388,20 @@ export default function DecksScreen() {
 		try {
 			setDecks(await getDecks());
 		} catch (loadError) {
-			setError(loadError instanceof Error ? loadError.message : 'Nao foi possivel carregar os decks.');
+			setError(messageOf(loadError, 'Nao foi possivel carregar os decks.'));
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
-	useEffect(() => {
-		// A carga inicial sincroniza a tela com a API quando a rota é montada.
-		// eslint-disable-next-line react-hooks/set-state-in-effect
-		void loadDecks();
-	}, []);
+	
+	useFocusEffect(
+		useCallback(() => {
+			void loadDecks();
+		}, []),
+	);
 
-	// Recupera as cores escolhidas pelo usuário (ficam salvas no aparelho)
+	
 	useEffect(() => {
 		AsyncStorage.getItem(DECK_COLORS_KEY).then((saved) => {
 			if (saved) setDeckColors(JSON.parse(saved));
@@ -261,9 +417,52 @@ export default function DecksScreen() {
 			setDecks((currentDecks) => [...currentDecks, { ...createdDeck, cards: createdDeck.cards ?? [] }]);
 			setModalVisible(false);
 		} catch (saveError) {
-			setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel criar o deck.');
+			setError(messageOf(saveError, 'Nao foi possivel criar o deck.'));
 		}
 	};
+
+	
+	const handleRename = async (deck: Deck, name: string) => {
+		await updateDeck(deck.id, name);
+		setDecks((currentDecks) =>
+			currentDecks.map((item) => (item.id === deck.id ? { ...item, name } : item)),
+		);
+	};
+
+	const handleDelete = (deck: Deck) => {
+		Alert.alert(
+			'Excluir deck',
+			`Tem certeza que deseja excluir "${deck.name}"? Todos os cards dele serão apagados.`,
+			[
+				{ text: 'Cancelar', style: 'cancel' },
+				{
+					text: 'Excluir',
+					style: 'destructive',
+					onPress: async () => {
+						try {
+							await deleteDeck(deck.id);
+							setDecks((currentDecks) => currentDecks.filter((item) => item.id !== deck.id));
+
+							const { [String(deck.id)]: _removed, ...restColors } = deckColors;
+							setDeckColors(restColors);
+							AsyncStorage.setItem(DECK_COLORS_KEY, JSON.stringify(restColors));
+
+							setOptionsDeck(null);
+						} catch (deleteError) {
+							setOptionsDeck(null);
+							setError(messageOf(deleteError, 'Nao foi possivel excluir o deck.'));
+						}
+					},
+				},
+			],
+		);
+	};
+
+	
+	const query = normalize(search);
+	const visibleDecks = decks
+		.map((deck, originalIndex) => ({ deck, originalIndex }))
+		.filter(({ deck }) => query === '' || normalize(deck.name).includes(query));
 
 	return (
 		<View style={styles.screen}>
@@ -286,6 +485,7 @@ export default function DecksScreen() {
 					styles.content,
 					{ paddingBottom: insets.bottom + 90, paddingTop: Math.max(insets.top, 10) + 8 },
 				]}
+				keyboardShouldPersistTaps="handled"
 				showsVerticalScrollIndicator={false}
 			>
 				<View style={styles.header}>
@@ -300,31 +500,71 @@ export default function DecksScreen() {
 					</View>
 				</View>
 
-				<Pressable accessibilityRole="search" style={styles.searchBar}>
-					<View style={styles.searchIcon} />
-					<View style={styles.searchHandle} />
+				<Pressable onPress={() => searchRef.current?.focus()} style={styles.searchBar}>
+					<TextInput
+						accessibilityLabel="Buscar deck"
+						autoCapitalize="none"
+						autoCorrect={false}
+						onChangeText={setSearch}
+						placeholder="Buscar deck"
+						placeholderTextColor="#6F82C9"
+						ref={searchRef}
+						returnKeyType="search"
+						selectionColor={colors.blue}
+						style={styles.searchInput}
+						value={search}
+					/>
+					{search.length > 0 ? (
+						<Pressable
+							accessibilityLabel="Limpar busca"
+							hitSlop={10}
+							onPress={() => setSearch('')}
+							style={styles.clearButton}
+						>
+							<View style={[styles.clearLine, { transform: [{ rotate: '45deg' }] }]} />
+							<View style={[styles.clearLine, { transform: [{ rotate: '-45deg' }] }]} />
+						</Pressable>
+					) : null}
+					<View style={styles.searchIconWrap}>
+						<View style={styles.searchIcon} />
+						<View style={styles.searchHandle} />
+					</View>
 				</Pressable>
 
 				{isLoading ? <ActivityIndicator color={colors.yellow} size="large" style={styles.loader} /> : null}
 				{error ? <Text style={styles.error}>{error}</Text> : null}
 
+				{!isLoading && !error && decks.length > 0 && visibleDecks.length === 0 ? (
+					<Text style={styles.error}>Nenhum deck encontrado para "{search.trim()}".</Text>
+				) : null}
+
 				<View style={styles.deckList}>
-					{decks.map((deck, index) => {
-						const accent = deckColors[String(deck.id)] ?? deckAccents[index % deckAccents.length];
+					{visibleDecks.map(({ deck, originalIndex }, position) => {
+						const accent =
+							deckColors[String(deck.id)] ?? deckAccents[originalIndex % deckAccents.length];
 
 						return (
 							<DeckCard
 								accent={accent}
 								count={String(deck.cards?.length ?? 0).padStart(2, '0')}
-								first={index === 0}
+								first={position === 0}
 								key={deck.id}
 								name={deck.name}
-								shapes={getShapesForColor(accent, index)}
-								width={deckWidths[index % deckWidths.length]}
+								onLongPress={() => setOptionsDeck(deck)}
+								onPress={() =>
+									router.push({
+										pathname: '/deck/[id]',
+										params: { id: String(deck.id), name: deck.name, color: accent },
+									})
+								}
+								shapes={getShapesForColor(accent, originalIndex)}
+								width={deckWidths[originalIndex % deckWidths.length]}
 							/>
 						);
 					})}
 				</View>
+
+				{decks.length > 0 ? <Text style={styles.tip}>Segure um deck para renomear ou excluir</Text> : null}
 
 				<Pressable
 					accessibilityRole="button"
@@ -342,6 +582,13 @@ export default function DecksScreen() {
 					top={screenH * 0.26}
 				/>
 			)}
+
+			<DeckOptionsModal
+				deck={optionsDeck}
+				onClose={() => setOptionsDeck(null)}
+				onDelete={handleDelete}
+				onRename={handleRename}
+			/>
 		</View>
 	);
 }
@@ -385,27 +632,32 @@ const styles = StyleSheet.create({
 		elevation: 3,
 		flexDirection: 'row',
 		height: 42,
-		justifyContent: 'flex-end',
 		marginTop: 22,
-		paddingRight: 16,
+		paddingHorizontal: 14,
 		shadowColor: '#174CCB',
 		shadowOpacity: 0.25,
 		shadowRadius: 3,
 	},
+	searchInput: { color: colors.ink, flex: 1, fontSize: 16, height: '100%', padding: 0 },
+	clearButton: { alignItems: 'center', height: 20, justifyContent: 'center', marginRight: 10, width: 20 },
+	clearLine: { backgroundColor: colors.blue, borderRadius: 2, height: 2.5, position: 'absolute', width: 14 },
+	searchIconWrap: { alignItems: 'center', height: 24, justifyContent: 'center', width: 24 },
 	searchIcon: { borderColor: colors.blue, borderRadius: 10, borderWidth: 2.5, height: 18, width: 18 },
 	searchHandle: {
 		backgroundColor: colors.blue,
 		borderRadius: 2,
 		height: 3,
-		marginLeft: -2,
-		marginTop: 16,
+		left: 15,
+		position: 'absolute',
+		top: 18,
 		transform: [{ rotate: '45deg' }],
 		width: 8,
 	},
 
-	deckList: { marginBottom: 32, marginLeft: -16, marginTop: 36 },
+	deckList: { marginBottom: 12, marginLeft: -16, marginTop: 36 },
 	loader: { marginTop: 48 },
 	error: { color: '#FFFFFF', fontSize: 14, marginTop: 24, textAlign: 'center' },
+	tip: { color: '#DDE6FF', fontSize: 12, marginBottom: 20, textAlign: 'center' },
 	deckCard: {
 		borderBottomRightRadius: 20,
 		borderTopRightRadius: 20,
@@ -451,8 +703,7 @@ const styles = StyleSheet.create({
 	createButtonText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 	pressed: { opacity: 0.75 },
 
-	// ---------- Modal ----------
-	// elevation/zIndex altos para ficar acima dos cards (que têm elevation no Android)
+	
 	overlay: {
 		bottom: 0,
 		elevation: 20,
@@ -534,4 +785,33 @@ const styles = StyleSheet.create({
 	},
 	modalButtonDisabled: { opacity: 0.55 },
 	modalButtonText: { color: colors.ink, fontSize: 15, fontWeight: '800' },
+
+	
+	optionsBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(17, 17, 17, 0.4)',
+		flex: 1,
+		justifyContent: 'center',
+		padding: 24,
+	},
+	optionsCard: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 24,
+		maxWidth: 420,
+		padding: 20,
+		width: '100%',
+	},
+	optionsTitle: { color: colors.ink, fontSize: 22, fontWeight: '900' },
+	optionsLabel: { color: colors.muted, fontSize: 14, fontWeight: '700', marginTop: 16 },
+	optionsError: { color: colors.danger, fontSize: 13, marginTop: 10 },
+	optionButton: {
+		alignItems: 'center',
+		backgroundColor: colors.lilac,
+		borderRadius: 12,
+		marginTop: 12,
+		paddingVertical: 14,
+	},
+	optionText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
+	cancelButton: { alignItems: 'center', marginTop: 14, padding: 8 },
+	cancelText: { color: colors.muted, fontSize: 14, fontWeight: '700' },
 });

@@ -45,6 +45,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
 		throw new Error('A resposta da API não contém o nome e o token esperados.');
 	}
 
+	await AsyncStorage.setItem(AUTH_TOKEN_KEY, result.token);
 	return result;
 }
 
@@ -143,3 +144,7 @@ function getApiBaseUrl(): string {
 
 	return baseUrl;
 }
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { AUTH_TOKEN_KEY } from './decks';
+

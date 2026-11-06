@@ -1,6 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+	ActivityIndicator,
 	KeyboardAvoidingView,
 	Platform,
 	Pressable,
@@ -13,6 +15,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polygon } from 'react-native-svg';
+import { createDeck, getDecks, type Deck } from '../../../services/decks';
+
+const DECK_COLORS_KEY = 'deckColors';
 
 const colors = {
 	blue: '#3975F6',
@@ -38,6 +43,14 @@ const themeColors = [
 ];
 
 type Shape = { fill: string; points: string };
+
+function adjustColor(color: string, factor: number) {
+	const hex = color.replace('#', '');
+	const red = Math.min(255, Math.round(parseInt(hex.slice(0, 2), 16) * factor));
+	const green = Math.min(255, Math.round(parseInt(hex.slice(2, 4), 16) * factor));
+	const blue = Math.min(255, Math.round(parseInt(hex.slice(4, 6), 16) * factor));
+	return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
 
 type DeckCardProps = {
 	accent: string;
@@ -100,6 +113,21 @@ const italianShapes: Shape[] = [
 	{ fill: '#12A878', points: '58,-5 105,-5 105,105 36,105' },
 	{ fill: '#0F9C70', points: '84,-5 105,-5 105,105 76,105' },
 ];
+
+const deckAccents = [colors.yellow, colors.pink, colors.green, '#8A3FFC', '#00CFFF'];
+const deckShapes = [englishShapes, frenchShapes, italianShapes, englishShapes, frenchShapes];
+const deckWidths = ['92%', '82%', '72%'] as const;
+
+// As faixas sempre são geradas a partir da cor do card (em tons mais claros e escuros)
+function getShapesForColor(color: string, templateIndex: number): Shape[] {
+	const template = deckShapes[templateIndex % deckShapes.length];
+	const shades = [1.18, 0.86, 0.72, 0.62];
+
+	return template.map((shape, index) => ({
+		...shape,
+		fill: adjustColor(color, shades[index % shades.length]),
+	}));
+}
 
 type CreateDeckModalProps = {
 	onClose: () => void;
@@ -195,11 +223,46 @@ export default function DecksScreen() {
 	const { height: screenH, width: screenW } = useWindowDimensions();
 	const circleSize = 2800;
 	const [modalVisible, setModalVisible] = useState(false);
+	const [decks, setDecks] = useState<Deck[]>([]);
+	const [deckColors, setDeckColors] = useState<Record<string, string>>({});
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState('');
 
-	const handleCreate = (name: string, color: string) => {
-		// TODO: salvar o novo deck (estado global, API ou banco local)
-		console.log('Criar deck', { color, name });
-		setModalVisible(false);
+	const loadDecks = async () => {
+		setError('');
+		try {
+			setDecks(await getDecks());
+		} catch (loadError) {
+			setError(loadError instanceof Error ? loadError.message : 'Nao foi possivel carregar os decks.');
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		// A carga inicial sincroniza a tela com a API quando a rota é montada.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
+		void loadDecks();
+	}, []);
+
+	// Recupera as cores escolhidas pelo usuário (ficam salvas no aparelho)
+	useEffect(() => {
+		AsyncStorage.getItem(DECK_COLORS_KEY).then((saved) => {
+			if (saved) setDeckColors(JSON.parse(saved));
+		});
+	}, []);
+
+	const handleCreate = async (name: string, color: string) => {
+		try {
+			const createdDeck = await createDeck(name);
+			const nextColors = { ...deckColors, [String(createdDeck.id)]: color };
+			setDeckColors(nextColors);
+			AsyncStorage.setItem(DECK_COLORS_KEY, JSON.stringify(nextColors));
+			setDecks((currentDecks) => [...currentDecks, { ...createdDeck, cards: createdDeck.cards ?? [] }]);
+			setModalVisible(false);
+		} catch (saveError) {
+			setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel criar o deck.');
+		}
 	};
 
 	return (
@@ -242,29 +305,25 @@ export default function DecksScreen() {
 					<View style={styles.searchHandle} />
 				</Pressable>
 
+				{isLoading ? <ActivityIndicator color={colors.yellow} size="large" style={styles.loader} /> : null}
+				{error ? <Text style={styles.error}>{error}</Text> : null}
+
 				<View style={styles.deckList}>
-					<DeckCard
-						first
-						accent={colors.yellow}
-						count="12"
-						name="Inglês"
-						shapes={englishShapes}
-						width="92%"
-					/>
-					<DeckCard
-						accent={colors.pink}
-						count="23"
-						name="Francês"
-						shapes={frenchShapes}
-						width="82%"
-					/>
-					<DeckCard
-						accent={colors.green}
-						count="06"
-						name="Italiano"
-						shapes={italianShapes}
-						width="72%"
-					/>
+					{decks.map((deck, index) => {
+						const accent = deckColors[String(deck.id)] ?? deckAccents[index % deckAccents.length];
+
+						return (
+							<DeckCard
+								accent={accent}
+								count={String(deck.cards?.length ?? 0).padStart(2, '0')}
+								first={index === 0}
+								key={deck.id}
+								name={deck.name}
+								shapes={getShapesForColor(accent, index)}
+								width={deckWidths[index % deckWidths.length]}
+							/>
+						);
+					})}
 				</View>
 
 				<Pressable
@@ -345,6 +404,8 @@ const styles = StyleSheet.create({
 	},
 
 	deckList: { marginBottom: 32, marginLeft: -16, marginTop: 36 },
+	loader: { marginTop: 48 },
+	error: { color: '#FFFFFF', fontSize: 14, marginTop: 24, textAlign: 'center' },
 	deckCard: {
 		borderBottomRightRadius: 20,
 		borderTopRightRadius: 20,

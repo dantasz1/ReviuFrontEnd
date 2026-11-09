@@ -50,10 +50,10 @@ export default function SignupScreen() {
 		setLoading(true);
 
 		try {
-			// Cria a conta; o backend envia o código de verificação para o e-mail
+			
 			await register(name, email, values.password);
 
-			// Guarda o e-mail para a tela de verificação não perdê-lo se a página recarregar
+			
 			await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);
 
 			if (Platform.OS === 'web') (document.activeElement as HTMLElement | null)?.blur();

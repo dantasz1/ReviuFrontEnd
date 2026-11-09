@@ -23,7 +23,7 @@ const colors = {
 	green: '#18D09C',
 };
 
-// Mesmas cores padrão da tela de decks (quando o deck não tem cor escolhida)
+
 const deckAccents = [colors.yellow, colors.pink, colors.green, '#8A3FFC', '#00CFFF'];
 const avatarPalette = ['#BA7656', '#3975F6', '#18D09C', '#8A3FFC', '#FF4E78'];
 const emptyStats: Stats = { coins: 0, streak: 0, studiedToday: false };
@@ -44,7 +44,7 @@ function todayKey() {
 	return `${now.getFullYear()}-${month}-${day}`;
 }
 
-// Cards cujo prazo de revisão já venceu (cards novos também contam)
+
 function countDue(deck: Deck) {
 	const today = todayKey();
 	return (deck.cards ?? []).filter((card) => !card.nextReview || card.nextReview.slice(0, 10) <= today).length;
@@ -55,7 +55,7 @@ function firstNameOf(fullName: string) {
 	return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
 }
 
-// Cor estável por usuário: o mesmo nome dá sempre a mesma cor
+
 function avatarColorFor(name: string) {
 	if (!name) return '#D9D9D9';
 	const sum = Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0);
@@ -88,9 +88,9 @@ function DeckCard({ name, count, color, light, dark, onPress }: DeckCardProps) {
 		>
 			{w > 0 && (
 				<Svg height={h} pointerEvents="none" style={styles.cardSvg} width={w}>
-					{/* círculo claro no topo */}
+					
 					<Circle cx={w * 0.3} cy={-h * 0.1} fill={light} r={w * 0.75} />
-					{/* faceta escura embaixo */}
+					
 					<Polygon fill={dark} points={`${-5},${h * 0.72} ${w * 0.55},${h + 5} ${-5},${h + 5}`} />
 					<Polygon fill={dark} opacity={0.55} points={`${w * 0.55},${h + 5} ${w + 5},${h * 0.7} ${w + 5},${h + 5}`} />
 				</Svg>
@@ -122,7 +122,7 @@ export default function HomeScreen() {
 		return () => cancelAnimationFrame(frame);
 	}, []);
 
-	// Recarrega sempre que o Home ganha foco (ex.: depois de estudar um deck)
+	
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
@@ -130,7 +130,7 @@ export default function HomeScreen() {
 			(async () => {
 				setError('');
 
-				// allSettled: se uma parte falhar (ex.: stats ainda sem endpoint), o resto da tela continua
+				
 				const [decksResult, colorsResult, nameResult, statsResult] = await Promise.allSettled([
 					getDecks(),
 					AsyncStorage.getItem(DECK_COLORS_KEY),
@@ -166,7 +166,7 @@ export default function HomeScreen() {
 		}, []),
 	);
 
-	// Decks com cards vencidos, os mais urgentes primeiro
+	
 	const pendingDecks = decks
 		.map((deck) => ({ deck, due: countDue(deck) }))
 		.filter((item) => item.due > 0)
@@ -177,7 +177,7 @@ export default function HomeScreen() {
 	const firstName = firstNameOf(userName);
 	const initial = firstName.charAt(0).toUpperCase();
 
-	// 1º cor do deck (servidor), 2º cor salva no aparelho, 3º cor padrão pelo id
+	
 	const colorFor = (deck: Deck) =>
 		deck.color ?? deckColors[String(deck.id)] ?? deckAccents[deck.id % deckAccents.length];
 
@@ -235,7 +235,7 @@ export default function HomeScreen() {
 					)}
 				</Text>
 
-				{/* overflow visível: as moedas saem por cima do card, como no Figma */}
+				
 				<View style={styles.coinsCard}>
 					<View pointerEvents="none" style={styles.coinsClip}>
 						<Svg height="100%" preserveAspectRatio="none" viewBox="0 0 100 100" width="100%">
@@ -315,7 +315,7 @@ export default function HomeScreen() {
 							/>
 						);
 					})}
-					{/* mantém o card com a mesma largura quando só há um deck pendente */}
+					
 					{shownDecks.length === 1 ? <View style={styles.deckSpacer} /> : null}
 				</View>
 

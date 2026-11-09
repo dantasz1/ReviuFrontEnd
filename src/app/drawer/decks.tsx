@@ -144,7 +144,7 @@ const deckAccents = [colors.yellow, colors.pink, colors.green, '#8A3FFC', '#00CF
 const deckShapes = [englishShapes, frenchShapes, italianShapes, englishShapes, frenchShapes];
 const deckWidths = ['92%', '82%', '72%'] as const;
 
-// As faixas sempre são geradas a partir da cor do card (em tons mais claros e escuros)
+
 function getShapesForColor(color: string, templateIndex: number): Shape[] {
 	const template = deckShapes[templateIndex % deckShapes.length];
 	const shades = [1.18, 0.86, 0.72, 0.62];

@@ -1,3 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { AUTH_TOKEN_KEY, USER_NAME_KEY, request } from './decks';
+
 type LoginResponse = {
 	name: string;
 	token: string;
@@ -31,8 +35,11 @@ export async function login(email: string, password: string): Promise<LoginRespo
 	}
 
 	if (!response.ok) {
-		throw new Error(await getApiErrorMessage(response, 'Não foi possível fazer login.'));
+	if (response.status === 400 || response.status === 401 || response.status === 403) {
+		throw new Error('E-mail ou senha incorretos.');
 	}
+	throw new Error('Não foi possível entrar agora. Tente novamente em instantes.');
+}
 
 	let result: unknown;
 	try {
@@ -46,8 +53,10 @@ export async function login(email: string, password: string): Promise<LoginRespo
 	}
 
 	await AsyncStorage.setItem(AUTH_TOKEN_KEY, result.token);
+	await AsyncStorage.setItem(USER_NAME_KEY, result.name);
 	return result;
 }
+
 
 export async function requestPasswordReset(email: string): Promise<void> {
 	const baseUrl = getApiBaseUrl();
@@ -87,6 +96,28 @@ export async function resetPassword(code: string, newPassword: string): Promise<
 	if (!response.ok) {
 		throw new Error(await getApiErrorMessage(response, 'Não foi possível redefinir a senha.'));
 	}
+}
+
+export function register(name: string, email: string, password: string) {
+	const username = email.split('@')[0];
+	return request<void>('/auth/register', {
+		body: JSON.stringify({ name, username, email, password }),
+		method: 'POST',
+	});
+}
+
+export function verifyEmail(email: string, code: string) {
+	return request<void>('/auth/verify', {
+		body: JSON.stringify({ email, code }),
+		method: 'POST',
+	});
+}
+
+export function resendVerification(email: string) {
+	return request<void>('/auth/resend-verification', {
+		body: JSON.stringify({ email }),
+		method: 'POST',
+	});
 }
 
 async function getApiErrorMessage(response: Response, fallback: string): Promise<string> {
@@ -144,7 +175,3 @@ function getApiBaseUrl(): string {
 
 	return baseUrl;
 }
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import { AUTH_TOKEN_KEY } from './decks';
-

@@ -1,3 +1,4 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -19,6 +20,7 @@ import {
 	type DeckCard,
 	createCard,
 	deleteCard,
+	generateCardsFromFile,
 	getCards,
 	getDueCards,
 	reviewCard,
@@ -32,7 +34,7 @@ const colors = {
 	lilac: '#F0E7FF',
 };
 
-
+// Notas do SM2 enviadas em { quality }
 const ratings = [
 	{ label: 'Errei', quality: 1, color: '#FF3B78' },
 	{ label: 'Difícil', quality: 3, color: '#FF9500' },
@@ -44,7 +46,7 @@ function messageOf(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
-
+// ---------- Sessão de estudo ----------
 function StudySession({
 	deckId,
 	cards,
@@ -120,7 +122,7 @@ function StudySession({
 	);
 }
 
-
+// ---------- Modal de novo card ----------
 function AddCardModal({
 	visible,
 	onClose,
@@ -219,6 +221,7 @@ export default function DeckDetailScreen() {
 	const [error, setError] = useState('');
 	const [showAdd, setShowAdd] = useState(false);
 	const [studying, setStudying] = useState(false);
+	const [generating, setGenerating] = useState(false);
 
 	const accent = params.color ?? colors.yellow;
 
@@ -260,6 +263,48 @@ export default function DeckDetailScreen() {
 				},
 			},
 		]);
+	};
+
+	// Escolhe um PDF e pede para a API gerar os cards com IA
+	const handleGenerateFromPdf = async () => {
+		if (generating) return;
+
+		try {
+			const result = await DocumentPicker.getDocumentAsync({
+				type: 'application/pdf',
+				copyToCacheDirectory: true,
+			});
+
+			if (result.canceled || result.assets.length === 0) return;
+
+			const file = result.assets[0];
+			const countBefore = cards.length;
+
+			setGenerating(true);
+			setError('');
+
+			await generateCardsFromFile(deckId, {
+				uri: file.uri,
+				name: file.name,
+				mimeType: file.mimeType ?? 'application/pdf',
+			});
+
+			const [all, due] = await Promise.all([getCards(deckId), getDueCards(deckId)]);
+			setCards(all);
+			setDueCards(due);
+
+			const created = all.length - countBefore;
+			Alert.alert(
+				'Cards gerados',
+				created > 0
+					? `${created} ${created === 1 ? 'card foi criado' : 'cards foram criados'} a partir do PDF.`
+					: 'O PDF foi processado, mas nenhum card novo apareceu no deck.',
+			);
+		} catch (e) {
+			Alert.alert('Não foi possível gerar os cards', messageOf(e, 'Tente novamente em instantes.'));
+		} finally {
+			setGenerating(false);
+		}
 	};
 
 	const finishStudy = async () => {
@@ -323,7 +368,7 @@ export default function DeckDetailScreen() {
 					</View>
 
 					<ScrollView
-						contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+						contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
 						showsVerticalScrollIndicator={false}
 					>
 						{loading ? <ActivityIndicator color={colors.blue} style={styles.loader} /> : null}
@@ -332,7 +377,7 @@ export default function DeckDetailScreen() {
 						{!loading && !error && visibleCards.length === 0 ? (
 							<Text style={styles.empty}>
 								{tab === 'all'
-									? 'Este deck ainda não tem cards. Toque em "Novo card" para criar.'
+									? 'Este deck ainda não tem cards. Crie um card ou gere a partir de um PDF.'
 									: 'Nenhum card para revisar agora. 🎉'}
 							</Text>
 						) : null}
@@ -357,20 +402,39 @@ export default function DeckDetailScreen() {
 						) : null}
 					</ScrollView>
 
-					<Pressable
-						onPress={() => setShowAdd(true)}
-						style={({ pressed }) => [
-							styles.fab,
-							{ bottom: insets.bottom + 24 },
-							pressed && styles.pressed,
-						]}
-					>
-						<Text style={styles.fabText}>Novo card</Text>
-					</Pressable>
+					<View style={[styles.actions, { bottom: insets.bottom + 24 }]}>
+						<Pressable
+							disabled={generating}
+							onPress={handleGenerateFromPdf}
+							style={({ pressed }) => [styles.pdfButton, pressed && styles.pressed]}
+						>
+							<Text style={styles.pdfButtonText}>Gerar com PDF</Text>
+						</Pressable>
+
+						<Pressable
+							onPress={() => setShowAdd(true)}
+							style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+						>
+							<Text style={styles.fabText}>Novo card</Text>
+						</Pressable>
+					</View>
 				</View>
 			)}
 
 			<AddCardModal onClose={() => setShowAdd(false)} onSave={handleCreate} visible={showAdd} />
+
+			{/* Aviso enquanto a IA gera os cards (pode demorar) */}
+			<Modal animationType="fade" statusBarTranslucent transparent visible={generating}>
+				<View style={styles.generatingBackdrop}>
+					<View style={styles.generatingCard}>
+						<ActivityIndicator color={colors.blue} size="large" />
+						<Text style={styles.generatingTitle}>Gerando cards...</Text>
+						<Text style={styles.generatingText}>
+							A IA está lendo o PDF. Isso pode levar alguns instantes.
+						</Text>
+					</View>
+				</View>
+			</Modal>
 		</View>
 	);
 }
@@ -419,25 +483,65 @@ const styles = StyleSheet.create({
 	cardFront: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 	cardBack: { color: colors.muted, fontSize: 14, marginTop: 4 },
 
+	// Botões de baixo: Gerar com PDF + Novo card
+	actions: {
+		flexDirection: 'row',
+		gap: 12,
+		left: 20,
+		position: 'absolute',
+		right: 20,
+	},
+	pdfButton: {
+		alignItems: 'center',
+		backgroundColor: '#FFFFFF',
+		borderColor: colors.blue,
+		borderRadius: 12,
+		borderWidth: 2,
+		elevation: 4,
+		flex: 1,
+		height: 50,
+		justifyContent: 'center',
+		shadowColor: '#163EA5',
+		shadowOffset: { height: 3, width: 0 },
+		shadowOpacity: 0.25,
+		shadowRadius: 2,
+	},
+	pdfButtonText: { color: colors.blue, fontSize: 15, fontWeight: '800' },
 	fab: {
 		alignItems: 'center',
-		alignSelf: 'flex-end',
 		backgroundColor: colors.yellow,
 		borderRadius: 12,
 		elevation: 4,
+		flex: 1,
 		height: 50,
 		justifyContent: 'center',
-		position: 'absolute',
-		right: 20,
 		shadowColor: '#163EA5',
 		shadowOffset: { height: 3, width: 0 },
 		shadowOpacity: 0.35,
 		shadowRadius: 2,
-		width: 160,
 	},
 	fabText: { color: colors.ink, fontSize: 15, fontWeight: '800' },
 
-	
+	// Aviso de geração
+	generatingBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(17, 17, 17, 0.5)',
+		flex: 1,
+		justifyContent: 'center',
+		padding: 32,
+	},
+	generatingCard: {
+		alignItems: 'center',
+		backgroundColor: '#FFFFFF',
+		borderRadius: 24,
+		maxWidth: 360,
+		padding: 28,
+		width: '100%',
+	},
+	generatingTitle: { color: colors.ink, fontSize: 20, fontWeight: '900', marginTop: 16 },
+	generatingText: { color: colors.muted, fontSize: 14, marginTop: 8, textAlign: 'center' },
+
+	// Estudo
 	studyWrap: {
 		backgroundColor: '#FFFFFF',
 		borderTopLeftRadius: 28,
@@ -465,7 +569,7 @@ const styles = StyleSheet.create({
 	exitStudy: { alignItems: 'center', marginTop: 24, padding: 8 },
 	exitStudyText: { color: colors.muted, fontSize: 14, fontWeight: '700' },
 
-	
+	// Modal de novo card
 	modalBackdrop: {
 		alignItems: 'center',
 		backgroundColor: 'rgba(17, 17, 17, 0.4)',

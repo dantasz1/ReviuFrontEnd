@@ -1,8 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { register } from '../../../services/auth';
+
+const PENDING_EMAIL_KEY = '@reviu/pending-email';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const fields = [
 	{ key: 'name', placeholder: 'Digite seu nome', icon: require('@/assets/images/onboarding/name.png'), secure: false },
@@ -15,12 +21,23 @@ export default function SignupScreen() {
 	const [values, setValues] = useState<Record<string, string>>({});
 	const [passwordVisible, setPasswordVisible] = useState(false);
 	const [error, setError] = useState('');
+	const [loading, setLoading] = useState(false);
 
-	const createAccount = () => {
+	const createAccount = async () => {
+		if (loading) return;
+
 		const hasMissingField = fields.some((field) => !values[field.key]?.trim());
 
 		if (hasMissingField) {
 			setError('Preencha todos os campos para continuar.');
+			return;
+		}
+
+		const name = values.name.trim();
+		const email = values.email.trim();
+
+		if (!EMAIL_REGEX.test(email)) {
+			setError('Digite um e-mail válido.');
 			return;
 		}
 
@@ -30,7 +47,22 @@ export default function SignupScreen() {
 		}
 
 		setError('');
-		router.push('/auth/verify');
+		setLoading(true);
+
+		try {
+			// Cria a conta; o backend envia o código de verificação para o e-mail
+			await register(name, email, values.password);
+
+			// Guarda o e-mail para a tela de verificação não perdê-lo se a página recarregar
+			await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);
+
+			if (Platform.OS === 'web') (document.activeElement as HTMLElement | null)?.blur();
+			router.push({ pathname: '/auth/verify', params: { email } });
+		} catch (e) {
+			setError(e instanceof Error ? e.message : 'Não foi possível criar a conta.');
+		} finally {
+			setLoading(false);
+		}
 	};
 
 	return (
@@ -47,9 +79,21 @@ export default function SignupScreen() {
 						<View key={field.key} style={styles.field}>
 							<TextInput
 								accessibilityLabel={field.placeholder}
-								autoCapitalize={field.key === 'email' ? 'none' : 'sentences'}
+								autoCapitalize={field.key === 'name' ? 'words' : 'none'}
+								autoComplete={
+									field.key === 'name'
+										? 'name'
+										: field.key === 'email'
+											? 'email'
+											: 'new-password'
+								}
+								autoCorrect={false}
+								editable={!loading}
 								keyboardType={field.key === 'email' ? 'email-address' : 'default'}
-								onChangeText={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
+								onChangeText={(value) => {
+									setValues((current) => ({ ...current, [field.key]: value }));
+									if (error) setError('');
+								}}
 								placeholder={field.placeholder}
 								placeholderTextColor="rgba(0, 0, 0, 0.5)"
 								secureTextEntry={field.secure && !passwordVisible}
@@ -70,10 +114,12 @@ export default function SignupScreen() {
 				{error ? <Text style={styles.error}>{error}</Text> : null}
 				<Pressable
 					accessibilityRole="button"
+					accessibilityState={{ busy: loading, disabled: loading }}
+					disabled={loading}
 					onPress={createAccount}
-					style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+					style={({ pressed }) => [styles.button, (pressed || loading) && styles.buttonPressed]}
 				>
-					<Text style={styles.buttonText}>Criar conta</Text>
+					<Text style={styles.buttonText}>{loading ? 'Criando conta...' : 'Criar conta'}</Text>
 				</Pressable>
 			</SafeAreaView>
 		</View>

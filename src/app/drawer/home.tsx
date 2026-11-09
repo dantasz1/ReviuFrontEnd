@@ -1,10 +1,16 @@
-import LottieView from 'lottie-react-native';
-import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import LottieView from 'lottie-react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
+
+import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
+import { getStats, type Stats } from '../../../services/user';
+
+const DECK_COLORS_KEY = 'deckColors';
 
 const colors = {
 	ink: '#151515',
@@ -13,8 +19,48 @@ const colors = {
 	background: '#FFFFFF',
 	lilac: '#F0E7FF',
 	yellow: '#FFD33D',
-	red: '#FF4E78',
+	pink: '#FF3B78',
+	green: '#18D09C',
 };
+
+// Mesmas cores padrão da tela de decks (quando o deck não tem cor escolhida)
+const deckAccents = [colors.yellow, colors.pink, colors.green, '#8A3FFC', '#00CFFF'];
+const avatarPalette = ['#BA7656', '#3975F6', '#18D09C', '#8A3FFC', '#FF4E78'];
+const emptyStats: Stats = { coins: 0, streak: 0, studiedToday: false };
+
+function adjustColor(color: string, factor: number) {
+	const hex = color.replace('#', '');
+	const red = Math.min(255, Math.round(parseInt(hex.slice(0, 2), 16) * factor));
+	const green = Math.min(255, Math.round(parseInt(hex.slice(2, 4), 16) * factor));
+	const blue = Math.min(255, Math.round(parseInt(hex.slice(4, 6), 16) * factor));
+	return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Data de hoje no formato do backend (ex.: 2026-11-07)
+function todayKey() {
+	const now = new Date();
+	const month = String(now.getMonth() + 1).padStart(2, '0');
+	const day = String(now.getDate()).padStart(2, '0');
+	return `${now.getFullYear()}-${month}-${day}`;
+}
+
+// Cards cujo prazo de revisão já venceu (cards novos também contam)
+function countDue(deck: Deck) {
+	const today = todayKey();
+	return (deck.cards ?? []).filter((card) => !card.nextReview || card.nextReview.slice(0, 10) <= today).length;
+}
+
+function firstNameOf(fullName: string) {
+	const first = fullName.trim().split(/\s+/)[0] ?? '';
+	return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
+}
+
+// Cor estável por usuário: o mesmo nome dá sempre a mesma cor
+function avatarColorFor(name: string) {
+	if (!name) return '#D9D9D9';
+	const sum = Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0);
+	return avatarPalette[sum % avatarPalette.length];
+}
 
 type DeckCardProps = {
 	name: string;
@@ -22,19 +68,23 @@ type DeckCardProps = {
 	color: string;
 	light: string;
 	dark: string;
+	onPress: () => void;
 };
 
-function DeckCard({ name, count, color, light, dark }: DeckCardProps) {
+function DeckCard({ name, count, color, light, dark, onPress }: DeckCardProps) {
 	const [size, setSize] = useState({ height: 0, width: 0 });
 	const { height: h, width: w } = size;
 
 	return (
-		<View
+		<Pressable
+			accessibilityLabel={`Abrir deck ${name}`}
+			accessibilityRole="button"
 			onLayout={(event) => {
 				const { height, width } = event.nativeEvent.layout;
 				setSize({ height, width });
 			}}
-			style={[styles.deckCard, { backgroundColor: color }]}
+			onPress={onPress}
+			style={({ pressed }) => [styles.deckCard, { backgroundColor: color }, pressed && { opacity: 0.9 }]}
 		>
 			{w > 0 && (
 				<Svg height={h} pointerEvents="none" style={styles.cardSvg} width={w}>
@@ -45,10 +95,12 @@ function DeckCard({ name, count, color, light, dark }: DeckCardProps) {
 					<Polygon fill={dark} opacity={0.55} points={`${w * 0.55},${h + 5} ${w + 5},${h * 0.7} ${w + 5},${h + 5}`} />
 				</Svg>
 			)}
-			<Text style={styles.deckName}>{name}</Text>
+			<Text numberOfLines={1} style={styles.deckName}>
+				{name}
+			</Text>
 			<Text style={styles.deckCount}>{count}</Text>
 			<Text style={styles.deckCaption}>Cartas a revisar</Text>
-		</View>
+		</Pressable>
 	);
 }
 
@@ -58,10 +110,82 @@ export default function HomeScreen() {
 	const coinsRef = useRef<LottieView>(null);
 	const curveSize = 1400;
 
+	const [decks, setDecks] = useState<Deck[]>([]);
+	const [deckColors, setDeckColors] = useState<Record<string, string>>({});
+	const [userName, setUserName] = useState('');
+	const [stats, setStats] = useState<Stats>(emptyStats);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState('');
+
 	useEffect(() => {
 		const frame = requestAnimationFrame(() => coinsRef.current?.play());
 		return () => cancelAnimationFrame(frame);
 	}, []);
+
+	// Recarrega sempre que o Home ganha foco (ex.: depois de estudar um deck)
+	useFocusEffect(
+		useCallback(() => {
+			let active = true;
+
+			(async () => {
+				setError('');
+
+				// allSettled: se uma parte falhar (ex.: stats ainda sem endpoint), o resto da tela continua
+				const [decksResult, colorsResult, nameResult, statsResult] = await Promise.allSettled([
+					getDecks(),
+					AsyncStorage.getItem(DECK_COLORS_KEY),
+					AsyncStorage.getItem(USER_NAME_KEY),
+					getStats(),
+				]);
+
+				if (!active) return;
+
+				if (decksResult.status === 'fulfilled') {
+					setDecks(decksResult.value);
+				} else {
+					const reason = decksResult.reason;
+					setError(reason instanceof Error ? reason.message : 'Não foi possível carregar seus decks.');
+				}
+
+				if (colorsResult.status === 'fulfilled' && colorsResult.value) {
+					try {
+						setDeckColors(JSON.parse(colorsResult.value));
+					} catch {
+						setDeckColors({});
+					}
+				}
+
+				setUserName(nameResult.status === 'fulfilled' && nameResult.value ? nameResult.value : '');
+				setStats(statsResult.status === 'fulfilled' ? statsResult.value : emptyStats);
+				setLoading(false);
+			})();
+
+			return () => {
+				active = false;
+			};
+		}, []),
+	);
+
+	// Decks com cards vencidos, os mais urgentes primeiro
+	const pendingDecks = decks
+		.map((deck) => ({ deck, due: countDue(deck) }))
+		.filter((item) => item.due > 0)
+		.sort((a, b) => b.due - a.due);
+
+	const pendingCount = pendingDecks.length;
+	const shownDecks = pendingDecks.slice(0, 2);
+	const firstName = firstNameOf(userName);
+	const initial = firstName.charAt(0).toUpperCase();
+
+	// 1º cor do deck (servidor), 2º cor salva no aparelho, 3º cor padrão pelo id
+	const colorFor = (deck: Deck) =>
+		deck.color ?? deckColors[String(deck.id)] ?? deckAccents[deck.id % deckAccents.length];
+
+	const openDeck = (deck: Deck, accent: string) =>
+		router.push({
+			pathname: '/deck/[id]',
+			params: { id: String(deck.id), name: deck.name, color: accent },
+		});
 
 	return (
 		<View style={styles.screen}>
@@ -89,14 +213,26 @@ export default function HomeScreen() {
 						source={require('@/assets/images/home/NotificacaoAzul.svg')}
 						style={styles.notificationIcon}
 					/>
-					<View style={styles.avatar}>
-						<Text style={styles.avatarText}>J</Text>
+					<View style={[styles.avatar, { backgroundColor: avatarColorFor(userName) }]}>
+						<Text style={styles.avatarText}>{initial}</Text>
 					</View>
 				</View>
 
-				<Text style={styles.greeting}>Olá, Jimmy</Text>
+				<Text style={styles.greeting}>{firstName ? `Olá, ${firstName}` : 'Olá'}</Text>
 				<Text style={styles.subtitle}>
-					Você tem <Text style={styles.subtitleHighlight}>3 decks pendentes</Text> para revisar
+					{loading ? (
+						' '
+					) : pendingCount > 0 ? (
+						<>
+							Você tem{' '}
+							<Text style={styles.subtitleHighlight}>
+								{pendingCount} {pendingCount === 1 ? 'deck pendente' : 'decks pendentes'}
+							</Text>{' '}
+							para revisar
+						</>
+					) : (
+						'Você está em dia com as revisões 🎉'
+					)}
 				</Text>
 
 				{/* overflow visível: as moedas saem por cima do card, como no Figma */}
@@ -116,8 +252,8 @@ export default function HomeScreen() {
 					/>
 					<View style={styles.coinsCopy}>
 						<Text style={styles.coinsLabel}>Você possui</Text>
-						<Text style={styles.coinsValue}>200</Text>
-						<Text style={styles.coinsLabel}>moedas</Text>
+						<Text style={styles.coinsValue}>{stats.coins}</Text>
+						<Text style={styles.coinsLabel}>{stats.coins === 1 ? 'moeda' : 'moedas'}</Text>
 					</View>
 				</View>
 
@@ -129,21 +265,58 @@ export default function HomeScreen() {
 						style={styles.streakAnimation}
 					/>
 					<View style={styles.streakCopy}>
-						<Text style={styles.streakTitle}>Sua ofensiva atual</Text>
-						<Text style={styles.streakTitle}>é de 9 dias.</Text>
+						{stats.streak > 0 ? (
+							<>
+								<Text style={styles.streakTitle}>Sua ofensiva atual</Text>
+								<Text style={styles.streakTitle}>
+									é de {stats.streak} {stats.streak === 1 ? 'dia' : 'dias'}.
+								</Text>
+							</>
+						) : (
+							<>
+								<Text style={styles.streakTitle}>Estude hoje para</Text>
+								<Text style={styles.streakTitle}>começar sua ofensiva.</Text>
+							</>
+						)}
 					</View>
 				</View>
 
-				<View style={styles.deckHeadingRow}>
-					<Text style={styles.deckHeading}>3 Decks pendentes</Text>
-					<View style={styles.alertBadge}>
-						<Text style={styles.alertText}>!</Text>
+				{pendingCount > 0 ? (
+					<View style={styles.deckHeadingRow}>
+						<Text style={styles.deckHeading}>
+							{pendingCount} {pendingCount === 1 ? 'Deck pendente' : 'Decks pendentes'}
+						</Text>
+						<View style={styles.alertBadge}>
+							<Text style={styles.alertText}>!</Text>
+						</View>
 					</View>
-				</View>
+				) : null}
+
+				{loading ? <ActivityIndicator color={colors.blue} style={styles.state} /> : null}
+				{error ? <Text style={styles.stateText}>{error}</Text> : null}
+
+				{!loading && !error && decks.length === 0 ? (
+					<Text style={styles.stateText}>Você ainda não tem decks. Crie o primeiro na aba Decks.</Text>
+				) : null}
 
 				<View style={styles.decksGrid}>
-					<DeckCard color={colors.yellow} count="12" dark="#E8B93A" light="#FFDE55" name="Inglês" />
-					<DeckCard color="#FF3B78" count="23" dark="#B91B5A" light="#FF6A7C" name="Francês" />
+					{shownDecks.map(({ deck, due }) => {
+						const accent = colorFor(deck);
+
+						return (
+							<DeckCard
+								color={accent}
+								count={String(due).padStart(2, '0')}
+								dark={adjustColor(accent, 0.72)}
+								key={deck.id}
+								light={adjustColor(accent, 1.18)}
+								name={deck.name}
+								onPress={() => openDeck(deck, accent)}
+							/>
+						);
+					})}
+					{/* mantém o card com a mesma largura quando só há um deck pendente */}
+					{shownDecks.length === 1 ? <View style={styles.deckSpacer} /> : null}
 				</View>
 
 				<Pressable
@@ -168,7 +341,6 @@ const styles = StyleSheet.create({
 	notificationIcon: { height: 26, width: 26 },
 	avatar: {
 		alignItems: 'center',
-		backgroundColor: '#BA7656',
 		borderColor: '#FFFFFF',
 		borderRadius: 26,
 		borderWidth: 3,
@@ -224,7 +396,11 @@ const styles = StyleSheet.create({
 	},
 	alertText: { color: '#FF315C', fontSize: 14, fontWeight: '900' },
 
+	state: { marginTop: 24 },
+	stateText: { color: '#5A5A66', fontSize: 14, marginTop: 20, textAlign: 'center' },
+
 	decksGrid: { flexDirection: 'row', gap: 15 },
+	deckSpacer: { flex: 1 },
 	deckCard: {
 		borderRadius: 16,
 		elevation: 4,

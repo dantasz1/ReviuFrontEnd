@@ -104,3 +104,16 @@ export async function completeOnboarding() {
 	await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(completedProgress));
 	return completedProgress;
 }
+
+export async function getOnboardingAnswersForApi() {
+	const { answers } = await getOnboardingProgress();
+
+	return {
+		focoEstudos: answers.focus,
+		prazoFinal: answers.deadline,
+		metaDiaria: answers.dailyGoal,
+		horarioFoco: answers.focusTime,
+		retencaoConteudo: answers.learningStyle,
+		ritmoRevisao: answers.reviewPace,
+	};
+}

@@ -13,13 +13,16 @@ import {
 	Text,
 	TextInput,
 	View,
+	
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
 	type DeckCard,
 	createCard,
+	createCardsBulk,
 	deleteCard,
+	extractGeneratedCards,
 	generateCardsFromFile,
 	getCards,
 	getDueCards,
@@ -34,7 +37,7 @@ const colors = {
 	lilac: '#F0E7FF',
 };
 
-// Notas do SM2 enviadas em { quality }
+
 const ratings = [
 	{ label: 'Errei', quality: 1, color: '#FF3B78' },
 	{ label: 'Difícil', quality: 3, color: '#FF9500' },
@@ -46,7 +49,7 @@ function messageOf(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
-// ---------- Sessão de estudo ----------
+
 function StudySession({
 	deckId,
 	cards,
@@ -122,7 +125,7 @@ function StudySession({
 	);
 }
 
-// ---------- Modal de novo card ----------
+
 function AddCardModal({
 	visible,
 	onClose,
@@ -207,7 +210,7 @@ function AddCardModal({
 	);
 }
 
-// ---------- Tela do deck ----------
+
 export default function DeckDetailScreen() {
 	const params = useLocalSearchParams<{ id: string; name?: string; color?: string }>();
 	const deckId = Number(params.id);
@@ -239,7 +242,7 @@ export default function DeckDetailScreen() {
 	}, [deckId]);
 
 	useEffect(() => {
-		void load();
+		queueMicrotask(() => void load());
 	}, [load]);
 
 	const handleCreate = async (frontText: string, backText: string) => {
@@ -265,47 +268,62 @@ export default function DeckDetailScreen() {
 		]);
 	};
 
-	// Escolhe um PDF e pede para a API gerar os cards com IA
+
 	const handleGenerateFromPdf = async () => {
-		if (generating) return;
+	if (generating) return;
 
-		try {
-			const result = await DocumentPicker.getDocumentAsync({
-				type: 'application/pdf',
-				copyToCacheDirectory: true,
-			});
+	try {
+		const result = await DocumentPicker.getDocumentAsync({
+			type: 'application/pdf',
+			copyToCacheDirectory: true,
+		});
 
-			if (result.canceled || result.assets.length === 0) return;
+		if (result.canceled || result.assets.length === 0) return;
 
-			const file = result.assets[0];
-			const countBefore = cards.length;
+		const file = result.assets[0];
+		const countBefore = cards.length;
 
-			setGenerating(true);
-			setError('');
+		setGenerating(true);
+		setError('');
 
-			await generateCardsFromFile(deckId, {
-				uri: file.uri,
-				name: file.name,
-				mimeType: file.mimeType ?? 'application/pdf',
-			});
+		const response = await generateCardsFromFile(deckId, {
+			uri: file.uri,
+			name: file.name,
+			mimeType: file.mimeType ?? 'application/pdf',
+		});
 
-			const [all, due] = await Promise.all([getCards(deckId), getDueCards(deckId)]);
-			setCards(all);
-			setDueCards(due);
+		
+		console.log('RESPOSTA PDF:', JSON.stringify(response)?.slice(0, 500));
 
-			const created = all.length - countBefore;
-			Alert.alert(
-				'Cards gerados',
-				created > 0
-					? `${created} ${created === 1 ? 'card foi criado' : 'cards foram criados'} a partir do PDF.`
-					: 'O PDF foi processado, mas nenhum card novo apareceu no deck.',
-			);
-		} catch (e) {
-			Alert.alert('Não foi possível gerar os cards', messageOf(e, 'Tente novamente em instantes.'));
-		} finally {
-			setGenerating(false);
+		let [all, due] = await Promise.all([getCards(deckId), getDueCards(deckId)]);
+		let created = all.length - countBefore;
+
+		
+		if (created <= 0) {
+			const generated = extractGeneratedCards(response);
+
+			if (generated.length > 0) {
+				await createCardsBulk(deckId, generated);
+				[all, due] = await Promise.all([getCards(deckId), getDueCards(deckId)]);
+				created = all.length - countBefore;
+			}
 		}
-	};
+
+		setCards(all);
+		setDueCards(due);
+
+		Alert.alert(
+			created > 0 ? 'Cards gerados' : 'Nenhum card gerado',
+			created > 0
+				? `${created} ${created === 1 ? 'card foi criado' : 'cards foram criados'} a partir do PDF.`
+				: 'O PDF foi processado, mas a IA não devolveu cards. Tente um PDF com mais texto.',
+		);
+	} catch (e) {
+		Alert.alert('Não foi possível gerar os cards', messageOf(e, 'Tente novamente em instantes.'));
+	} finally {
+		setGenerating(false);
+	}
+};
 
 	const finishStudy = async () => {
 		setStudying(false);
@@ -423,7 +441,7 @@ export default function DeckDetailScreen() {
 
 			<AddCardModal onClose={() => setShowAdd(false)} onSave={handleCreate} visible={showAdd} />
 
-			{/* Aviso enquanto a IA gera os cards (pode demorar) */}
+			
 			<Modal animationType="fade" statusBarTranslucent transparent visible={generating}>
 				<View style={styles.generatingBackdrop}>
 					<View style={styles.generatingCard}>

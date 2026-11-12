@@ -71,8 +71,6 @@ export default function OnboardingScreen() {
   }
 
   const backgroundWidth = 881;
-  const backgroundHeight = 1279;
-
   return (
     <View style={[styles.screen, { width }]}>
       <Image

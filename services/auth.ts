@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { OnboardingAnswers } from './onboarding';
 
 import { AUTH_TOKEN_KEY, USER_NAME_KEY, request } from './decks';
 
@@ -98,10 +99,16 @@ export async function resetPassword(code: string, newPassword: string): Promise<
 	}
 }
 
-export function register(name: string, email: string, password: string) {
-	const username = email.split('@')[0];
+export type RegisterInput = {
+	name: string;
+	username: string;
+	email: string;
+	password: string;
+} & OnboardingAnswers;
+
+export function register(data: RegisterInput) {
 	return request<void>('/auth/register', {
-		body: JSON.stringify({ name, username, email, password }),
+		body: JSON.stringify(data),
 		method: 'POST',
 	});
 }
@@ -119,6 +126,11 @@ export function resendVerification(email: string) {
 		method: 'POST',
 	});
 }
+
+export async function logout() {
+	await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_NAME_KEY, 'deckColors']);
+}
+
 
 async function getApiErrorMessage(response: Response, fallback: string): Promise<string> {
 	const responseText = await response.text();

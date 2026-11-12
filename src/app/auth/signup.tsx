@@ -7,11 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { register } from '../../../services/auth';
 
+import { getOnboardingAnswersForApi } from '@/data/onboarding';
+
 const PENDING_EMAIL_KEY = '@reviu/pending-email';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_REGEX = /^[a-zA-Z0-9_.]{3,20}$/;
 
 const fields = [
 	{ key: 'name', placeholder: 'Digite seu nome', icon: require('@/assets/images/onboarding/name.png'), secure: false },
+	{ key: 'username', placeholder: 'Escolha um nome de usuário', icon: require('@/assets/images/onboarding/name.png'), secure: false },
 	{ key: 'email', placeholder: 'Digite seu email', icon: require('@/assets/images/onboarding/email.png'), secure: false },
 	{ key: 'password', placeholder: 'Digite sua senha', icon: require('@/assets/images/onboarding/password.png'), secure: true },
 	{ key: 'passwordConfirmation', placeholder: 'Digite sua senha novamente', icon: require('@/assets/images/onboarding/password.png'), secure: true },
@@ -34,7 +38,13 @@ export default function SignupScreen() {
 		}
 
 		const name = values.name.trim();
+		const username = values.username.trim();
 		const email = values.email.trim();
+
+		if (!USERNAME_REGEX.test(username)) {
+			setError('O usuário deve ter de 3 a 20 caracteres: letras, números, _ ou .');
+			return;
+		}
 
 		if (!EMAIL_REGEX.test(email)) {
 			setError('Digite um e-mail válido.');
@@ -50,19 +60,33 @@ export default function SignupScreen() {
 		setLoading(true);
 
 		try {
-			
-			await register(name, email, values.password);
+	
+	const answers = await getOnboardingAnswersForApi();
 
-			
-			await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);
+	
+	await register({
+		name,
+		username,
+		email,
+		password: values.password,
+		focoEstudos: answers.focoEstudos ?? 'Vestibular / ENEM',
+		prazoFinal: answers.prazoFinal ?? 'Próximos 3 meses',
+		metaDiaria: answers.metaDiaria ?? '10 minutos',
+		horarioFoco: answers.horarioFoco ?? 'Manhã',
+		retencaoConteudo: answers.retencaoConteudo ?? 'Esqueço fácil',
+		ritmoRevisao: answers.ritmoRevisao ?? 'Leve',
+	});
 
-			if (Platform.OS === 'web') (document.activeElement as HTMLElement | null)?.blur();
-			router.push({ pathname: '/auth/verify', params: { email } });
-		} catch (e) {
-			setError(e instanceof Error ? e.message : 'Não foi possível criar a conta.');
-		} finally {
-			setLoading(false);
-		}
+	
+	await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);
+
+	if (Platform.OS === 'web') (document.activeElement as HTMLElement | null)?.blur();
+	router.push({ pathname: '/auth/verify', params: { email } });
+} catch (e) {
+	setError(e instanceof Error ? e.message : 'Não foi possível criar a conta.');
+} finally {
+	setLoading(false);
+}
 	};
 
 	return (
@@ -83,9 +107,11 @@ export default function SignupScreen() {
 								autoComplete={
 									field.key === 'name'
 										? 'name'
-										: field.key === 'email'
-											? 'email'
-											: 'new-password'
+										: field.key === 'username'
+											? 'username-new'
+											: field.key === 'email'
+												? 'email'
+												: 'new-password'
 								}
 								autoCorrect={false}
 								editable={!loading}
@@ -150,11 +176,11 @@ const styles = StyleSheet.create({
 		fontSize: 32,
 		fontWeight: '700',
 		lineHeight: 35,
-		marginTop: 65,
+		marginTop: 40,
 	},
 	fields: {
-		gap: 20,
-		marginTop: 65,
+		gap: 14,
+		marginTop: 36,
 	},
 	field: {
 		alignItems: 'center',

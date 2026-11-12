@@ -10,8 +10,6 @@ import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
 import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
 import { getStats, type Stats } from '../../../services/user';
 
-const DECK_COLORS_KEY = 'deckColors';
-
 const colors = {
 	ink: '#151515',
 	blue: '#3975F6',
@@ -23,10 +21,9 @@ const colors = {
 	green: '#18D09C',
 };
 
-
 const deckAccents = [colors.yellow, colors.pink, colors.green, '#8A3FFC', '#00CFFF'];
 const avatarPalette = ['#BA7656', '#3975F6', '#18D09C', '#8A3FFC', '#FF4E78'];
-const emptyStats: Stats = { coins: 0, streak: 0, studiedToday: false };
+const emptyStats: Stats = { streak: 0, studiedToday: false };
 
 function adjustColor(color: string, factor: number) {
 	const hex = color.replace('#', '');
@@ -36,7 +33,7 @@ function adjustColor(color: string, factor: number) {
 	return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
-// Data de hoje no formato do backend (ex.: 2026-11-07)
+
 function todayKey() {
 	const now = new Date();
 	const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -88,9 +85,7 @@ function DeckCard({ name, count, color, light, dark, onPress }: DeckCardProps) {
 		>
 			{w > 0 && (
 				<Svg height={h} pointerEvents="none" style={styles.cardSvg} width={w}>
-					
 					<Circle cx={w * 0.3} cy={-h * 0.1} fill={light} r={w * 0.75} />
-					
 					<Polygon fill={dark} points={`${-5},${h * 0.72} ${w * 0.55},${h + 5} ${-5},${h + 5}`} />
 					<Polygon fill={dark} opacity={0.55} points={`${w * 0.55},${h + 5} ${w + 5},${h * 0.7} ${w + 5},${h + 5}`} />
 				</Svg>
@@ -107,22 +102,21 @@ function DeckCard({ name, count, color, light, dark, onPress }: DeckCardProps) {
 export default function HomeScreen() {
 	const insets = useSafeAreaInsets();
 	const { height: screenH, width: screenW } = useWindowDimensions();
-	const coinsRef = useRef<LottieView>(null);
+	const fireRef = useRef<LottieView>(null);
 	const curveSize = 1400;
 
 	const [decks, setDecks] = useState<Deck[]>([]);
-	const [deckColors, setDeckColors] = useState<Record<string, string>>({});
 	const [userName, setUserName] = useState('');
 	const [stats, setStats] = useState<Stats>(emptyStats);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState('');
 
 	useEffect(() => {
-		const frame = requestAnimationFrame(() => coinsRef.current?.play());
+		const frame = requestAnimationFrame(() => fireRef.current?.play());
 		return () => cancelAnimationFrame(frame);
 	}, []);
 
-	
+
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
@@ -131,9 +125,8 @@ export default function HomeScreen() {
 				setError('');
 
 				
-				const [decksResult, colorsResult, nameResult, statsResult] = await Promise.allSettled([
+				const [decksResult, nameResult, statsResult] = await Promise.allSettled([
 					getDecks(),
-					AsyncStorage.getItem(DECK_COLORS_KEY),
 					AsyncStorage.getItem(USER_NAME_KEY),
 					getStats(),
 				]);
@@ -145,14 +138,6 @@ export default function HomeScreen() {
 				} else {
 					const reason = decksResult.reason;
 					setError(reason instanceof Error ? reason.message : 'Não foi possível carregar seus decks.');
-				}
-
-				if (colorsResult.status === 'fulfilled' && colorsResult.value) {
-					try {
-						setDeckColors(JSON.parse(colorsResult.value));
-					} catch {
-						setDeckColors({});
-					}
 				}
 
 				setUserName(nameResult.status === 'fulfilled' && nameResult.value ? nameResult.value : '');
@@ -178,8 +163,13 @@ export default function HomeScreen() {
 	const initial = firstName.charAt(0).toUpperCase();
 
 	
-	const colorFor = (deck: Deck) =>
-		deck.color ?? deckColors[String(deck.id)] ?? deckAccents[deck.id % deckAccents.length];
+	const streakMessage = stats.studiedToday
+		? ['Você já estudou hoje.', 'Volte amanhã!']
+		: stats.streak > 0
+			? ['Estude hoje para', 'manter sua ofensiva.']
+			: ['Estude hoje para', 'começar sua ofensiva.'];
+
+	const colorFor = (deck: Deck) => deck.color ?? deckAccents[deck.id % deckAccents.length];
 
 	const openDeck = (deck: Deck, accent: string) =>
 		router.push({
@@ -243,17 +233,21 @@ export default function HomeScreen() {
 						</Svg>
 					</View>
 					<LottieView
-						ref={coinsRef}
+						ref={fireRef}
 						autoPlay
 						loop
+						resizeMode="contain"
 						speed={1.5}
-						source={require('@/assets/lotties/Animated Coins.json')}
-						style={styles.coinsAnimation}
+						source={require('@/assets/lotties/Fire animation.json')}
+						style={[
+							styles.coinsAnimation,
+							stats.streak === 0 && !stats.studiedToday && { opacity: 0.5 },
+						]}
 					/>
 					<View style={styles.coinsCopy}>
-						<Text style={styles.coinsLabel}>Você possui</Text>
-						<Text style={styles.coinsValue}>{stats.coins}</Text>
-						<Text style={styles.coinsLabel}>{stats.coins === 1 ? 'moeda' : 'moedas'}</Text>
+						<Text style={styles.coinsLabel}>Sua ofensiva</Text>
+						<Text style={styles.coinsValue}>{stats.streak}</Text>
+						<Text style={styles.coinsLabel}>{stats.streak === 1 ? 'dia' : 'dias'}</Text>
 					</View>
 				</View>
 
@@ -265,19 +259,8 @@ export default function HomeScreen() {
 						style={styles.streakAnimation}
 					/>
 					<View style={styles.streakCopy}>
-						{stats.streak > 0 ? (
-							<>
-								<Text style={styles.streakTitle}>Sua ofensiva atual</Text>
-								<Text style={styles.streakTitle}>
-									é de {stats.streak} {stats.streak === 1 ? 'dia' : 'dias'}.
-								</Text>
-							</>
-						) : (
-							<>
-								<Text style={styles.streakTitle}>Estude hoje para</Text>
-								<Text style={styles.streakTitle}>começar sua ofensiva.</Text>
-							</>
-						)}
+						<Text style={styles.streakTitle}>{streakMessage[0]}</Text>
+						<Text style={styles.streakTitle}>{streakMessage[1]}</Text>
 					</View>
 				</View>
 
@@ -315,6 +298,7 @@ export default function HomeScreen() {
 							/>
 						);
 					})}
+
 					
 					{shownDecks.length === 1 ? <View style={styles.deckSpacer} /> : null}
 				</View>
@@ -373,8 +357,15 @@ const styles = StyleSheet.create({
 		shadowRadius: 3,
 	},
 	coinsClip: { ...StyleSheet.absoluteFill, borderRadius: 16, overflow: 'hidden' },
-	coinsAnimation: { height: 150, marginTop: -38, width: 190 },
-	coinsCopy: { alignItems: 'flex-end', flex: 1, paddingRight: 18 },
+	coinsAnimation: {
+		bottom: 10,
+		height: 170,
+		left: 0,
+		pointerEvents: 'none',
+		position: 'absolute',
+		width: 220,
+	},
+	coinsCopy: { alignItems: 'flex-end', flex: 1, paddingRight: 18, zIndex: 1 },
 	coinsLabel: { color: '#DCE4FF', fontSize: 15, fontWeight: '600' },
 	coinsValue: { color: '#FFFFFF', fontSize: 40, fontWeight: '900', lineHeight: 44 },
 

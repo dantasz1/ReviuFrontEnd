@@ -1,6 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { logout } from '../../../services/auth';
+import { USER_NAME_KEY } from '../../../services/decks';
 
 const colors = {
 	ink: '#151515',
@@ -11,24 +17,61 @@ const colors = {
 	logout: '#B91B5A',
 };
 
-type MenuItem = { id: string; label: string; showBell?: boolean };
+const avatarPalette = ['#BA7656', '#3975F6', '#18D09C', '#8A3FFC', '#FF4E78'];
+
+
+function avatarColorFor(name: string) {
+	if (!name) return '#D9D9D9';
+	const sum = Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0);
+	return avatarPalette[sum % avatarPalette.length];
+}
+
+type MenuItem = { id: string; label: string; showBell?: boolean; href?: Href };
 
 const menuItems: MenuItem[] = [
-	{ id: 'profile', label: 'Perfil' },
+	{ id: 'profile', label: 'Perfil', href: '/drawer/profile' as Href },
 	{ id: 'notifications', label: 'Notificações', showBell: true },
 	{ id: 'terms', label: 'Termos de serviço' },
 	{ id: 'blocked', label: 'Contas bloqueadas' },
 	{ id: 'support', label: 'Suporte' },
 ];
 
+
+function confirmLogout(onConfirm: () => void) {
+	if (Platform.OS === 'web') {
+		if (window.confirm('Tem certeza que deseja sair da conta?')) onConfirm();
+		return;
+	}
+
+	Alert.alert('Sair da conta', 'Tem certeza que deseja sair?', [
+		{ text: 'Cancelar', style: 'cancel' },
+		{ text: 'Sair', style: 'destructive', onPress: onConfirm },
+	]);
+}
+
 export default function SettingsScreen() {
 	const insets = useSafeAreaInsets();
 	const { height: screenH, width: screenW } = useWindowDimensions();
 	const curveSize = 1400;
+	const [userName, setUserName] = useState('');
+
+	useFocusEffect(
+		useCallback(() => {
+			AsyncStorage.getItem(USER_NAME_KEY).then((saved) => setUserName(saved ?? ''));
+		}, []),
+	);
+
+	const initial = userName.trim().charAt(0).toUpperCase();
+
+	const handleLogout = () => {
+		confirmLogout(async () => {
+			await logout();
+			router.replace('/auth/login');
+		});
+	};
 
 	return (
 		<View style={styles.screen}>
-			
 			<View
 				pointerEvents="none"
 				style={[
@@ -55,9 +98,19 @@ export default function SettingsScreen() {
 						source={require('@/assets/images/home/NotificacaoAzul.svg')}
 						style={styles.notificationIcon}
 					/>
-					<View style={styles.avatar}>
-						<Text style={styles.avatarText}>J</Text>
-					</View>
+					<Pressable
+						accessibilityLabel="Abrir perfil"
+						accessibilityRole="button"
+						hitSlop={8}
+						onPress={() => router.push('/drawer/profile' as Href)}
+						style={({ pressed }) => [
+							styles.avatar,
+							{ backgroundColor: avatarColorFor(userName) },
+							pressed && styles.pressed,
+						]}
+					>
+						<Text style={styles.avatarText}>{initial}</Text>
+					</Pressable>
 				</View>
 
 				<Text style={styles.title}>Configurações</Text>
@@ -67,6 +120,9 @@ export default function SettingsScreen() {
 						<Pressable
 							accessibilityRole="button"
 							key={item.id}
+							onPress={() => {
+								if (item.href) router.push(item.href);
+							}}
 							style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
 						>
 							<Text style={styles.menuText}>{item.label}</Text>
@@ -83,6 +139,7 @@ export default function SettingsScreen() {
 
 				<Pressable
 					accessibilityRole="button"
+					onPress={handleLogout}
 					style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}
 				>
 					<Text style={styles.menuText}>Sair da conta</Text>
@@ -96,14 +153,12 @@ const styles = StyleSheet.create({
 	screen: { backgroundColor: colors.background, flex: 1, overflow: 'hidden' },
 	backgroundCurve: { backgroundColor: colors.lilac, position: 'absolute' },
 
-	
 	content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 14 },
 
 	profileRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
 	notificationIcon: { height: 26, width: 26 },
 	avatar: {
 		alignItems: 'center',
-		backgroundColor: '#BA7656',
 		borderColor: '#FFFFFF',
 		borderRadius: 26,
 		borderWidth: 3,

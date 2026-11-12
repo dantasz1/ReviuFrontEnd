@@ -5,10 +5,13 @@ import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'rea
 import {
 	ActivityIndicator,
 	Alert,
+	Animated,
+	Keyboard,
 	KeyboardAvoidingView,
 	Modal,
 	Platform,
 	Pressable,
+	RefreshControl,
 	ScrollView,
 	StyleSheet,
 	Text,
@@ -18,9 +21,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polygon } from 'react-native-svg';
-import { createDeck, deleteDeck, getDecks, updateDeck, type Deck } from '../../../services/decks';
-
-const DECK_COLORS_KEY = 'deckColors';
+import {
+	createDeck,
+	deleteDeck,
+	getDecks,
+	sendShareRequest,
+	updateDeck,
+	USER_NAME_KEY,
+	type Deck,
+} from '../../../services/decks';
+import { getFriends, type Person } from '../../../services/friends';
 
 const colors = {
 	blue: '#3975F6',
@@ -70,6 +80,15 @@ function messageOf(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
+const avatarPalette = ['#BA7656', '#3975F6', '#18D09C', '#8A3FFC', '#FF4E78'];
+
+
+function avatarColorFor(name: string) {
+	if (!name) return '#D9D9D9';
+	const sum = Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0);
+	return avatarPalette[sum % avatarPalette.length];
+}
+
 type DeckCardProps = {
 	accent: string;
 	count: string;
@@ -86,7 +105,7 @@ function DeckCard({ accent, count, name, shapes, width, first, onPress, onLongPr
 
 	return (
 		<Pressable
-			accessibilityHint="Segure para renomear ou excluir"
+			accessibilityHint="Segure para compartilhar, mudar a cor, renomear ou excluir"
 			accessibilityLabel={`Abrir deck ${name}`}
 			accessibilityRole="button"
 			onLayout={(event) => {
@@ -162,23 +181,53 @@ type CreateDeckModalProps = {
 };
 
 function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
+	const insets = useSafeAreaInsets();
+	const overlayRef = useRef<ComponentRef<typeof View>>(null);
+	const cardHeight = useRef(0);
+	const [shift] = useState(() => new Animated.Value(0));
 	const [name, setName] = useState('');
 	const [selected, setSelected] = useState<string | null>(null);
+
+	
+	useEffect(() => {
+		const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+		const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+		const animateTo = (value: number) =>
+			Animated.timing(shift, { duration: 220, toValue: value, useNativeDriver: true }).start();
+
+		const showSub = Keyboard.addListener(showEvent, (event) => {
+			overlayRef.current?.measureInWindow((_x, y) => {
+				const cardBottom = y + top + cardHeight.current;
+				const keyboardTop = event.endCoordinates.screenY;
+				const needed = cardBottom - (keyboardTop - 16);
+
+			
+				const maxUp = Math.max(0, top - (Math.max(insets.top, 10) + 8));
+				animateTo(-Math.min(Math.max(needed, 0), maxUp));
+			});
+		});
+		const hideSub = Keyboard.addListener(hideEvent, () => animateTo(0));
+
+		return () => {
+			showSub.remove();
+			hideSub.remove();
+		};
+	}, [insets.top, shift, top]);
 
 	const canCreate = name.trim().length > 0 && selected !== null;
 	const rows = [themeColors.slice(0, 5), themeColors.slice(5, 10)];
 
 	return (
-		<KeyboardAvoidingView
-			behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-			pointerEvents="box-none"
-			style={styles.overlay}
-		>
-			
+		<View collapsable={false} pointerEvents="box-none" ref={overlayRef} style={styles.overlay}>
 			<Pressable accessibilityLabel="Fechar" onPress={onClose} style={StyleSheet.absoluteFill} />
 
-			<View style={[styles.modalCard, { top }]}>
-				
+			<Animated.View
+				onLayout={(event) => {
+					cardHeight.current = event.nativeEvent.layout.height;
+				}}
+				style={[styles.modalCard, { top, transform: [{ translateY: shift }] }]}
+			>
 				<View pointerEvents="none" style={styles.modalCircle} />
 
 				<Pressable
@@ -196,6 +245,8 @@ function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
 				<TextInput
 					maxLength={30}
 					onChangeText={setName}
+					onSubmitEditing={Keyboard.dismiss}
+					returnKeyType="done"
 					selectionColor={colors.blue}
 					style={styles.input}
 					value={name}
@@ -239,38 +290,92 @@ function CreateDeckModal({ onClose, onCreate, top }: CreateDeckModalProps) {
 				>
 					<Text style={styles.modalButtonText}>Criar deck</Text>
 				</Pressable>
-			</View>
-		</KeyboardAvoidingView>
+			</Animated.View>
+		</View>
 	);
 }
 
 
 type DeckOptionsModalProps = {
 	deck: Deck | null;
+	currentColor: string;
 	onClose: () => void;
 	onRename: (deck: Deck, name: string) => Promise<void>;
+	onChangeColor: (deck: Deck, color: string) => Promise<void>;
+	onShare: (deck: Deck, friend: Person) => Promise<void>;
 	onDelete: (deck: Deck) => void;
 };
 
-function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModalProps) {
-	const [mode, setMode] = useState<'menu' | 'rename'>('menu');
+function DeckOptionsModal({
+	deck,
+	currentColor,
+	onClose,
+	onRename,
+	onChangeColor,
+	onShare,
+	onDelete,
+}: DeckOptionsModalProps) {
+	const [mode, setMode] = useState<'menu' | 'rename' | 'color' | 'share'>('menu');
 	const [name, setName] = useState('');
+	const [selectedColor, setSelectedColor] = useState(currentColor);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState('');
 
+	const [friends, setFriends] = useState<Person[]>([]);
+	const [loadingFriends, setLoadingFriends] = useState(false);
+	const [sharingId, setSharingId] = useState<number | null>(null);
+	const [sharedWith, setSharedWith] = useState<number[]>([]);
+
 	
 	useEffect(() => {
-		if (deck) {
+		if (!deck) return;
+
+		const reset = setTimeout(() => {
 			setMode('menu');
 			setName(deck.name);
+			setSelectedColor(currentColor);
 			setError('');
 			setSaving(false);
-		}
-	}, [deck]);
+			setFriends([]);
+			setSharingId(null);
+			setSharedWith([]);
+		}, 0);
+
+		return () => clearTimeout(reset);
+	}, [currentColor, deck]);
+
+	
+	useEffect(() => {
+		if (mode !== 'share') return;
+
+		let active = true;
+		queueMicrotask(() => {
+			if (!active) return;
+			setLoadingFriends(true);
+			setError('');
+		});
+
+		getFriends()
+			.then((list) => {
+				if (active) setFriends(list);
+			})
+			.catch((e) => {
+				if (active) setError(messageOf(e, 'Não foi possível carregar seus amigos.'));
+			})
+			.finally(() => {
+				if (active) setLoadingFriends(false);
+			});
+
+		return () => {
+			active = false;
+		};
+	}, [mode]);
 
 	if (!deck) return null;
 
 	const canSave = name.trim().length > 0 && name.trim() !== deck.name && !saving;
+	const canSaveColor = selectedColor.toLowerCase() !== currentColor.toLowerCase() && !saving;
+	const colorRows = [themeColors.slice(0, 5), themeColors.slice(5, 10)];
 
 	const handleSave = async () => {
 		if (!canSave) return;
@@ -284,6 +389,45 @@ function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModa
 		} finally {
 			setSaving(false);
 		}
+	};
+
+	const handleSaveColor = async () => {
+		if (!canSaveColor) return;
+		setSaving(true);
+		setError('');
+		try {
+			await onChangeColor(deck, selectedColor);
+			onClose();
+		} catch (e) {
+			setError(messageOf(e, 'Não foi possível mudar a cor do deck.'));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const confirmShare = (friend: Person) => {
+		Alert.alert(
+			'Compartilhar deck',
+			`Enviar um pedido para ${friend.name} receber uma cópia de "${deck.name}"?`,
+			[
+				{ text: 'Cancelar', style: 'cancel' },
+				{
+					text: 'Enviar pedido',
+					onPress: async () => {
+						setSharingId(friend.id);
+						setError('');
+						try {
+							await onShare(deck, friend);
+							setSharedWith((current) => [...current, friend.id]);
+						} catch (e) {
+							setError(messageOf(e, 'Não foi possível compartilhar o deck.'));
+						} finally {
+							setSharingId(null);
+						}
+					},
+				},
+			],
+		);
 	};
 
 	return (
@@ -303,6 +447,22 @@ function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModa
 						<>
 							<Pressable
 								accessibilityRole="button"
+								onPress={() => setMode('share')}
+								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
+							>
+								<Text style={styles.optionText}>Compartilhar com amigo</Text>
+							</Pressable>
+
+							<Pressable
+								accessibilityRole="button"
+								onPress={() => setMode('color')}
+								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
+							>
+								<Text style={styles.optionText}>Mudar cor</Text>
+							</Pressable>
+
+							<Pressable
+								accessibilityRole="button"
 								onPress={() => setMode('rename')}
 								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
 							>
@@ -319,6 +479,104 @@ function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModa
 
 							<Pressable accessibilityRole="button" onPress={onClose} style={styles.cancelButton}>
 								<Text style={styles.cancelText}>Cancelar</Text>
+							</Pressable>
+						</>
+					) : mode === 'share' ? (
+						<>
+							<Text style={styles.optionsLabel}>Enviar pedido de compartilhamento para</Text>
+
+							{loadingFriends ? <ActivityIndicator color={colors.blue} style={styles.shareLoader} /> : null}
+
+							{!loadingFriends && friends.length === 0 && !error ? (
+								<Text style={styles.shareEmpty}>
+									Você ainda não tem amigos. Adicione alguém na aba Amigos para compartilhar decks.
+								</Text>
+							) : null}
+
+							<ScrollView style={styles.shareList}>
+								{friends.map((friend) => {
+									const done = sharedWith.includes(friend.id);
+									const busy = sharingId === friend.id;
+
+									return (
+										<Pressable
+											accessibilityRole="button"
+											disabled={busy || done}
+											key={friend.id}
+											onPress={() => confirmShare(friend)}
+											style={({ pressed }) => [styles.shareRow, pressed && styles.pressed]}
+										>
+											<View style={[styles.shareAvatar, { backgroundColor: avatarColorFor(friend.name) }]}>
+												<Text style={styles.shareAvatarText}>{friend.name.charAt(0).toUpperCase()}</Text>
+											</View>
+											<Text numberOfLines={1} style={styles.shareName}>
+												{friend.name}
+											</Text>
+											{busy ? (
+												<ActivityIndicator color={colors.blue} />
+											) : done ? (
+												<Text style={styles.shareDone}>Pedido enviado ✓</Text>
+											) : null}
+										</Pressable>
+									);
+								})}
+							</ScrollView>
+
+							{error ? <Text style={styles.optionsError}>{error}</Text> : null}
+
+							<Pressable accessibilityRole="button" onPress={() => setMode('menu')} style={styles.cancelButton}>
+								<Text style={styles.cancelText}>Voltar</Text>
+							</Pressable>
+						</>
+					) : mode === 'color' ? (
+						<>
+							<Text style={styles.optionsLabel}>Escolha a nova cor</Text>
+
+							<View style={styles.swatches}>
+								{colorRows.map((row, rowIndex) => (
+									<View key={rowIndex} style={styles.swatchRow}>
+										{row.map((color) => {
+											const isSelected = selectedColor.toLowerCase() === color.toLowerCase();
+											return (
+												<Pressable
+													accessibilityLabel={`Cor ${color}`}
+													accessibilityRole="button"
+													accessibilityState={{ selected: isSelected }}
+													disabled={saving}
+													key={color}
+													onPress={() => {
+														setSelectedColor(color);
+														setError('');
+													}}
+													style={[
+														styles.swatch,
+														{ backgroundColor: color },
+														isSelected && styles.swatchSelected,
+													]}
+												/>
+											);
+										})}
+									</View>
+								))}
+							</View>
+
+							{error ? <Text style={styles.optionsError}>{error}</Text> : null}
+
+							<Pressable
+								accessibilityRole="button"
+								disabled={!canSaveColor}
+								onPress={handleSaveColor}
+								style={({ pressed }) => [
+									styles.modalButton,
+									!canSaveColor && styles.modalButtonDisabled,
+									pressed && canSaveColor && styles.pressed,
+								]}
+							>
+								<Text style={styles.modalButtonText}>{saving ? 'Salvando...' : 'Salvar cor'}</Text>
+							</Pressable>
+
+							<Pressable accessibilityRole="button" onPress={() => setMode('menu')} style={styles.cancelButton}>
+								<Text style={styles.cancelText}>Voltar</Text>
 							</Pressable>
 						</>
 					) : (
@@ -354,11 +612,7 @@ function DeckOptionsModal({ deck, onClose, onRename, onDelete }: DeckOptionsModa
 								<Text style={styles.modalButtonText}>{saving ? 'Salvando...' : 'Salvar'}</Text>
 							</Pressable>
 
-							<Pressable
-								accessibilityRole="button"
-								onPress={() => setMode('menu')}
-								style={styles.cancelButton}
-							>
+							<Pressable accessibilityRole="button" onPress={() => setMode('menu')} style={styles.cancelButton}>
 								<Text style={styles.cancelText}>Voltar</Text>
 							</Pressable>
 						</>
@@ -378,15 +632,38 @@ export default function DecksScreen() {
 	const [modalVisible, setModalVisible] = useState(false);
 	const [optionsDeck, setOptionsDeck] = useState<Deck | null>(null);
 	const [decks, setDecks] = useState<Deck[]>([]);
-	const [deckColors, setDeckColors] = useState<Record<string, string>>({});
+	const [userName, setUserName] = useState('');
 	const [search, setSearch] = useState('');
 	const [isLoading, setIsLoading] = useState(true);
+	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState('');
 
-	const loadDecks = async () => {
+	const loadDecks = async (showLoader = false) => {
 		setError('');
+		if (showLoader) setIsLoading(true);
 		try {
-			setDecks(await getDecks());
+			const loaded = await getDecks();
+
+			
+			const toMigrate = loaded
+				.filter((deck) => !deck.color)
+				.map((deck) => ({ deck, color: deckAccents[deck.id % deckAccents.length] }));
+			const results = await Promise.allSettled(
+				toMigrate.map(({ deck, color }) => updateDeck(deck.id, deck.name, color)),
+			);
+
+			const migrated = new Set<number>();
+			results.forEach((result, index) => {
+				if (result.status === 'fulfilled') migrated.add(toMigrate[index].deck.id);
+			});
+
+			setDecks(
+				loaded.map((deck) =>
+					migrated.has(deck.id)
+						? { ...deck, color: deckAccents[deck.id % deckAccents.length] }
+						: deck,
+				),
+			);
 		} catch (loadError) {
 			setError(messageOf(loadError, 'Nao foi possivel carregar os decks.'));
 		} finally {
@@ -394,39 +671,66 @@ export default function DecksScreen() {
 		}
 	};
 
-	
 	useFocusEffect(
 		useCallback(() => {
-			void loadDecks();
+			void loadDecks(true);
 		}, []),
 	);
 
-	
+	const handleRefresh = async () => {
+		setRefreshing(true);
+		try {
+			await loadDecks();
+		} finally {
+			setRefreshing(false);
+		}
+	};
+
 	useEffect(() => {
-		AsyncStorage.getItem(DECK_COLORS_KEY).then((saved) => {
-			if (saved) setDeckColors(JSON.parse(saved));
-		});
+		AsyncStorage.getItem(USER_NAME_KEY).then((saved) => setUserName(saved ?? ''));
 	}, []);
+
+	
+	const colorFor = (deck: Deck) => deck.color ?? deckAccents[deck.id % deckAccents.length];
 
 	const handleCreate = async (name: string, color: string) => {
 		try {
-			const createdDeck = await createDeck(name);
-			const nextColors = { ...deckColors, [String(createdDeck.id)]: color };
-			setDeckColors(nextColors);
-			AsyncStorage.setItem(DECK_COLORS_KEY, JSON.stringify(nextColors));
-			setDecks((currentDecks) => [...currentDecks, { ...createdDeck, cards: createdDeck.cards ?? [] }]);
+			const createdDeck = await createDeck(name, color);
+			setDecks((currentDecks) => [
+				...currentDecks,
+				{ ...createdDeck, color: createdDeck.color ?? color, cards: createdDeck.cards ?? [] },
+			]);
 			setModalVisible(false);
 		} catch (saveError) {
 			setError(messageOf(saveError, 'Nao foi possivel criar o deck.'));
 		}
 	};
 
-	
 	const handleRename = async (deck: Deck, name: string) => {
-		await updateDeck(deck.id, name);
+		
+		await updateDeck(deck.id, name, colorFor(deck));
 		setDecks((currentDecks) =>
 			currentDecks.map((item) => (item.id === deck.id ? { ...item, name } : item)),
 		);
+	};
+
+	const handleChangeColor = async (deck: Deck, color: string) => {
+		await updateDeck(deck.id, deck.name, color);
+		setDecks((currentDecks) =>
+			currentDecks.map((item) => (item.id === deck.id ? { ...item, color } : item)),
+		);
+	};
+
+	
+	const handleShare = async (deck: Deck, friend: Person) => {
+		try {
+			await sendShareRequest(deck.id, friend.id);
+		} catch (e) {
+			const message = messageOf(e, '');
+			if (message.includes('403')) throw new Error('Só o dono do deck pode compartilhá-lo.');
+			if (message.includes('404')) throw new Error('Deck ou usuário não encontrado.');
+			throw e;
+		}
 	};
 
 	const handleDelete = (deck: Deck) => {
@@ -442,11 +746,6 @@ export default function DecksScreen() {
 						try {
 							await deleteDeck(deck.id);
 							setDecks((currentDecks) => currentDecks.filter((item) => item.id !== deck.id));
-
-							const { [String(deck.id)]: _removed, ...restColors } = deckColors;
-							setDeckColors(restColors);
-							AsyncStorage.setItem(DECK_COLORS_KEY, JSON.stringify(restColors));
-
 							setOptionsDeck(null);
 						} catch (deleteError) {
 							setOptionsDeck(null);
@@ -458,7 +757,6 @@ export default function DecksScreen() {
 		);
 	};
 
-	
 	const query = normalize(search);
 	const visibleDecks = decks
 		.map((deck, originalIndex) => ({ deck, originalIndex }))
@@ -480,12 +778,21 @@ export default function DecksScreen() {
 				]}
 			/>
 			<ScrollView
-				bounces={false}
+				bounces
 				contentContainerStyle={[
 					styles.content,
 					{ paddingBottom: insets.bottom + 90, paddingTop: Math.max(insets.top, 10) + 8 },
 				]}
 				keyboardShouldPersistTaps="handled"
+				refreshControl={
+					<RefreshControl
+						colors={[colors.yellow]}
+						onRefresh={handleRefresh}
+						progressBackgroundColor={colors.blue}
+						refreshing={refreshing}
+						tintColor={colors.yellow}
+					/>
+				}
 				showsVerticalScrollIndicator={false}
 			>
 				<View style={styles.header}>
@@ -495,8 +802,8 @@ export default function DecksScreen() {
 						source={require('@/assets/images/home/NotificacaoBranca.svg')}
 						style={styles.notificationIcon}
 					/>
-					<View style={styles.avatar}>
-						<Text style={styles.avatarText}>J</Text>
+					<View style={[styles.avatar, { backgroundColor: avatarColorFor(userName) }]}>
+						<Text style={styles.avatarText}>{userName.trim().charAt(0).toUpperCase()}</Text>
 					</View>
 				</View>
 
@@ -535,13 +842,14 @@ export default function DecksScreen() {
 				{error ? <Text style={styles.error}>{error}</Text> : null}
 
 				{!isLoading && !error && decks.length > 0 && visibleDecks.length === 0 ? (
-					<Text style={styles.error}>Nenhum deck encontrado para "{search.trim()}".</Text>
+					<Text style={styles.error}>
+						Nenhum deck encontrado para &quot;{search.trim()}&quot;.
+					</Text>
 				) : null}
 
 				<View style={styles.deckList}>
 					{visibleDecks.map(({ deck, originalIndex }, position) => {
-						const accent =
-							deckColors[String(deck.id)] ?? deckAccents[originalIndex % deckAccents.length];
+						const accent = colorFor(deck);
 
 						return (
 							<DeckCard
@@ -557,14 +865,16 @@ export default function DecksScreen() {
 										params: { id: String(deck.id), name: deck.name, color: accent },
 									})
 								}
-								shapes={getShapesForColor(accent, originalIndex)}
+								shapes={getShapesForColor(accent, deck.id)}
 								width={deckWidths[originalIndex % deckWidths.length]}
 							/>
 						);
 					})}
 				</View>
 
-				{decks.length > 0 ? <Text style={styles.tip}>Segure um deck para renomear ou excluir</Text> : null}
+				{decks.length > 0 ? (
+					<Text style={styles.tip}>Segure um deck para compartilhar, mudar a cor, renomear ou excluir</Text>
+				) : null}
 
 				<Pressable
 					accessibilityRole="button"
@@ -584,10 +894,13 @@ export default function DecksScreen() {
 			)}
 
 			<DeckOptionsModal
+				currentColor={optionsDeck ? colorFor(optionsDeck) : colors.yellow}
 				deck={optionsDeck}
+				onChangeColor={handleChangeColor}
 				onClose={() => setOptionsDeck(null)}
 				onDelete={handleDelete}
 				onRename={handleRename}
+				onShare={handleShare}
 			/>
 		</View>
 	);
@@ -613,7 +926,6 @@ const styles = StyleSheet.create({
 	notificationIcon: { height: 26, width: 26 },
 	avatar: {
 		alignItems: 'center',
-		backgroundColor: '#BA7656',
 		borderColor: '#FFFFFF',
 		borderRadius: 26,
 		borderWidth: 3,
@@ -814,4 +1126,20 @@ const styles = StyleSheet.create({
 	optionText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 	cancelButton: { alignItems: 'center', marginTop: 14, padding: 8 },
 	cancelText: { color: colors.muted, fontSize: 14, fontWeight: '700' },
+
+	
+	shareLoader: { marginVertical: 24 },
+	shareEmpty: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 14 },
+	shareList: { marginTop: 8, maxHeight: 260 },
+	shareRow: { alignItems: 'center', flexDirection: 'row', paddingVertical: 10 },
+	shareAvatar: {
+		alignItems: 'center',
+		borderRadius: 20,
+		height: 40,
+		justifyContent: 'center',
+		width: 40,
+	},
+	shareAvatarText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+	shareName: { color: colors.ink, flex: 1, fontSize: 16, fontWeight: '600', marginLeft: 12 },
+	shareDone: { color: '#12B886', fontSize: 13, fontWeight: '800' },
 });

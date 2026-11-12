@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import LottieView from 'lottie-react-native';
-import { useState } from 'react';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import {
+	Keyboard,
 	KeyboardAvoidingView,
 	Platform,
 	Pressable,
@@ -21,6 +22,22 @@ export default function LoginScreen() {
 	const [passwordVisible, setPasswordVisible] = useState(false);
 	const [error, setError] = useState('');
 	const [isLoading, setIsLoading] = useState(false);
+	const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+	const passwordInputRef = useRef<ComponentRef<typeof TextInput>>(null);
+
+	useEffect(() => {
+		const subscription = Keyboard.addListener('keyboardDidHide', () => {
+			scrollRef.current?.scrollTo({ animated: true, y: 0 });
+		});
+
+		return () => subscription.remove();
+	}, []);
+
+	const handleInputFocus = () => {
+		setTimeout(() => {
+			scrollRef.current?.scrollTo({ animated: true, y: 740 });
+		}, 100);
+	};
 
 	const submitLogin = async () => {
 		if (!email.trim() || !password) {
@@ -51,6 +68,7 @@ export default function LoginScreen() {
 					<ScrollView
 						contentContainerStyle={styles.scrollContent}
 						keyboardShouldPersistTaps="handled"
+						ref={scrollRef}
 						showsVerticalScrollIndicator={false}
 					>
 						<Pressable
@@ -84,6 +102,8 @@ export default function LoginScreen() {
 									autoCapitalize="none"
 									keyboardType="email-address"
 									onChangeText={setEmail}
+									onFocus={handleInputFocus}
+									onSubmitEditing={() => passwordInputRef.current?.focus()}
 									placeholder="Digite seu email"
 									placeholderTextColor="rgba(0, 0, 0, 0.5)"
 									returnKeyType="next"
@@ -102,9 +122,11 @@ export default function LoginScreen() {
 								<TextInput
 									accessibilityLabel="Senha"
 									onChangeText={setPassword}
+								onFocus={handleInputFocus}
 									placeholder="Digite sua senha"
 									placeholderTextColor="rgba(0, 0, 0, 0.5)"
 									returnKeyType="done"
+									ref={passwordInputRef}
 									secureTextEntry={!passwordVisible}
 									style={styles.input}
 									textContentType="password"

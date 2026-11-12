@@ -1,60 +1,79 @@
+<h1 align="center">📚 Reviu</h1>
 
-## O Reviu é um aplicativo mobile voltado para estudantes. 
-A proposta é ajudar o usuário a estudar de forma mais eficaz e divertida por meio de questionários personalizados, revisão de conteúdos e acompanhamento do progresso. No primeiro acesso, o usuário responderá a algumas perguntas sobre seus objetivos e hábitos de estudo. Com essas informações, o aplicativo poderá oferecer uma experiência mais personalizada, ajudando cada pessoa a organizar melhor seus estudos e aprender no seu próprio ritmo.
+<p align="center">
+  <b>Estude de forma mais eficaz e divertida.</b>
+</p>
 
-# Welcome to your Expo app 👋
+<p align="center">
+  <img src="https://img.shields.io/badge/React_Native-3975F6?style=for-the-badge&logo=react&logoColor=white" alt="React Native" />
+  <img src="https://img.shields.io/badge/Expo-8A3FFC?style=for-the-badge&logo=expo&logoColor=white" alt="Expo" />
+  <img src="https://img.shields.io/badge/TypeScript-3975F6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Android-18D09C?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
+</p>
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+---
 
-## Get started
+## 💜 Sobre o Reviu
 
-1. Install dependencies
+O Reviu é um aplicativo mobile voltado para estudantes. A proposta é ajudar o usuário a estudar de forma mais eficaz e divertida por meio de questionários personalizados, revisão de conteúdos e acompanhamento do progresso.
 
-   ```bash
-   npm install
-   ```
+No primeiro acesso, o usuário responde a algumas perguntas sobre seus objetivos e hábitos de estudo. Com essas informações, o aplicativo oferece uma experiência mais personalizada, ajudando cada pessoa a organizar melhor seus estudos e aprender no seu próprio ritmo.
 
-2. Start the app
+> 🤖 Por enquanto, o Reviu está disponível apenas para **Android**.
+>
+> 🔌 Este repositório é o app. Ele precisa da API do Reviu rodando para funcionar.
 
-   ```bash
-   npx expo start
-   ```
+## ✨ O que você encontra no app
 
-In the output, you'll find options to open the app in a
+- 🎯 **Onboarding personalizado**: perguntas sobre foco, prazo, meta diária e ritmo de estudo
+- 🗂️ **Decks de cartas** com a cor que você escolher
+- 🔁 **Revisão no ritmo certo**, com repetição espaçada
+- 🔥 **Ofensiva**: quantos dias seguidos você estudou
+- 👫 **Compartilhe decks** com os amigos
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 🚀 Como entrar no aplicativo
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+**1. Instale as dependências**
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+**2. Crie um arquivo `.env` na raiz** com o endereço da API:
 
-### Other setup steps
+```
+EXPO_PUBLIC_API_URL=http://SEU_IP:8080
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+> 💡 No emulador Android, o endereço do seu computador é `10.0.2.2`. No celular, use o IP do computador na mesma rede Wi-Fi.
 
-## Learn more
+**3. Inicie o app**
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npx expo start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+**4. Abra no Android**
 
-## Join the community
+- 🤖 Aperte `a` no terminal para abrir no emulador Android
+- 📱 Ou escaneie o QR code com o app [Expo Go](https://expo.dev/go) no seu celular Android
 
-Join our community of developers creating universal apps.
+## 👋 Primeiro acesso
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Toque em **Começar** e responda às perguntas sobre os seus estudos
+2. Crie a conta e digite o código de 6 dígitos que chega no seu e-mail 📧
+3. Faça login e crie o seu primeiro deck 🎉
+
+Já tem conta? Toque em **Fazer Login**.
+
+## 🛠️ Deu algo estranho?
+
+Limpe o cache e inicie de novo:
+
+```bash
+npx expo start -c
+```
+
+---
+
+<p align="center">Feito com 💜 para quem quer aprender melhor</p>

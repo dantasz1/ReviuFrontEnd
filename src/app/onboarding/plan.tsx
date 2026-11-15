@@ -4,12 +4,9 @@ import LottieView from 'lottie-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { completeOnboarding } from '@/data/onboarding';
-
 export default function OnboardingPlanScreen() {
   const savePlan = async () => {
-    await completeOnboarding();
-    router.push('/auth/signup');
+    router.replace('/auth/signup');
   };
 
   return (

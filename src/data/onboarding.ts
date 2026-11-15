@@ -12,7 +12,13 @@ export type OnboardingProgress = {
 	completed: boolean;
 };
 
-const STORAGE_KEY = '@reviu/onboarding';
+function getStorageKey() {
+	const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+
+	return apiUrl
+		? `@reviu/onboarding:${encodeURIComponent(apiUrl)}`
+		: '@reviu/onboarding:unconfigured';
+}
 
 export const onboardingQuestions: OnboardingQuestion[] = [
 	{
@@ -54,7 +60,7 @@ const emptyProgress: OnboardingProgress = {
 };
 
 export async function getOnboardingProgress(): Promise<OnboardingProgress> {
-	const storedProgress = await AsyncStorage.getItem(STORAGE_KEY);
+	const storedProgress = await AsyncStorage.getItem(getStorageKey());
 
 	if (!storedProgress) {
 		return emptyProgress;
@@ -81,7 +87,7 @@ export async function saveOnboardingAnswer(questionIndex: number, answer: string
 		currentQuestion: questionIndex + 1,
 	};
 
-	await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProgress));
+	await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updatedProgress));
 	return updatedProgress;
 }
 
@@ -89,7 +95,7 @@ export async function setOnboardingQuestion(currentQuestion: number) {
 	const progress = await getOnboardingProgress();
 	const updatedProgress = { ...progress, currentQuestion };
 
-	await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProgress));
+	await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updatedProgress));
 	return updatedProgress;
 }
 
@@ -101,7 +107,7 @@ export async function completeOnboarding() {
 		completed: true,
 	};
 
-	await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(completedProgress));
+	await AsyncStorage.setItem(getStorageKey(), JSON.stringify(completedProgress));
 	return completedProgress;
 }
 

@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NotificationBell } from '@/components/NotificationBell';
 import { logout } from '../../../services/auth';
 import { USER_NAME_KEY } from '../../../services/decks';
 
@@ -121,17 +122,17 @@ export default function SettingsScreen() {
 							accessibilityRole="button"
 							key={item.id}
 							onPress={() => {
-								if (item.href) router.push(item.href);
+								if (item.href) {
+									router.push(item.href);
+								} else if (item.id === 'notifications') {
+									router.push('/drawer/notifications');
+								}
 							}}
 							style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
 						>
 							<Text style={styles.menuText}>{item.label}</Text>
 							{item.showBell && (
-								<Image
-									contentFit="contain"
-									source={require('@/assets/images/home/NotificacaoBranca.svg')}
-									style={styles.menuBell}
-								/>
+								<NotificationBell variant="white" />
 							)}
 						</Pressable>
 					))}

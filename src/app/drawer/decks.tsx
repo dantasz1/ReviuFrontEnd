@@ -20,6 +20,8 @@ import {
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { NotificationBell } from '@/components/NotificationBell';
 import Svg, { Polygon } from 'react-native-svg';
 import {
 	createDeck,
@@ -796,6 +798,7 @@ export default function DecksScreen() {
 				showsVerticalScrollIndicator={false}
 			>
 				<View style={styles.header}>
+					<NotificationBell variant="white" />
 					<Image
 						accessibilityLabel="Notificações"
 						contentFit="contain"
@@ -923,7 +926,7 @@ const styles = StyleSheet.create({
 		justifyContent: 'space-between',
 		paddingHorizontal: 8,
 	},
-	notificationIcon: { height: 26, width: 26 },
+	notificationIcon: { height: 0, width: 0 },
 	avatar: {
 		alignItems: 'center',
 		borderColor: '#FFFFFF',

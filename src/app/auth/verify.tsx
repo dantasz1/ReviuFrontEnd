@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { completeOnboarding } from '@/data/onboarding';
 import { resendVerification, verifyEmail } from '../../../services/auth';
 
 const PENDING_EMAIL_KEY = '@reviu/pending-email';
@@ -52,6 +53,7 @@ export default function VerifyScreen() {
 		setVerifying(true);
 		try {
 			await verifyEmail(email, code);
+			await completeOnboarding();
 			await AsyncStorage.removeItem(PENDING_EMAIL_KEY);
 			router.replace('/auth/login');
 		} catch (e) {

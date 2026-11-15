@@ -41,3 +41,7 @@ export function updateOnboarding(answers: OnboardingAnswers) {
 	});
 }
 
+export function sendOnboardingAnswers(answers: OnboardingAnswers) {
+	return request<void>('/user/onboarding', { body: JSON.stringify(answers), method: 'PUT' });
+}
+

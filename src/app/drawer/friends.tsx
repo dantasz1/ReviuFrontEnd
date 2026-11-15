@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NotificationBell } from '@/components/NotificationBell';
 import {
 	type ShareRequest,
 	USER_NAME_KEY,
@@ -570,6 +571,7 @@ export default function FriendsScreen() {
 				showsVerticalScrollIndicator={false}
 			>
 				<View style={[styles.profileRow, { paddingTop: Math.max(insets.top, 10) }]}>
+					<NotificationBell />
 					<Image
 						accessibilityLabel="Notificações"
 						contentFit="contain"
@@ -745,7 +747,7 @@ const styles = StyleSheet.create({
 	content: { paddingHorizontal: 24, paddingTop: 14 },
 
 	profileRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-	notificationIcon: { height: 26, width: 26 },
+	notificationIcon: { height: 0, width: 0 },
 	avatar: {
 		alignItems: 'center',
 		borderColor: '#FFFFFF',

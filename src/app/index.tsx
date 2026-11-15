@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getOnboardingProgress, onboardingQuestions } from '@/data/onboarding';
 import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
@@ -11,9 +12,14 @@ export default function HomeScreen() {
   const contentWidth = Math.min(width - 40, 360);
 
   useEffect(() => {
-    getOnboardingProgress().then((progress) => {
+    Promise.all([
+      getOnboardingProgress(),
+      AsyncStorage.getItem('@reviu/pending-email'),
+    ]).then(([progress, pendingEmail]) => {
       if (progress.completed) {
         router.replace('/auth/login');
+      } else if (progress.currentQuestion >= onboardingQuestions.length) {
+        router.replace(pendingEmail ? '/auth/verify' : '/auth/signup');
       }
     });
   }, []);
@@ -24,7 +30,7 @@ export default function HomeScreen() {
     if (progress.completed) {
       router.push('/auth/login');
     } else if (progress.currentQuestion >= onboardingQuestions.length) {
-      router.push('/onboarding/plan');
+      router.push('/auth/signup');
     } else {
       router.push('/onboarding' as Href);
     }

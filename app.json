@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "ReviuFrontEnd",
-    "slug": "ReviuFrontEnd",
-    "version": "1.0.0",
+    "name": "Reviu",
+    "slug": "reviu",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "reviufrontend",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.reviu.app",
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -22,7 +23,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#3975F6",
           "image": "./assets/images/icon.png",
           "imageWidth": 76
         }
@@ -30,11 +31,22 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "68974467-b495-4c91-8c1a-fe5ecd9a0029"
+      }
     }
   }
 }

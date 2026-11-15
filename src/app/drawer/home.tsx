@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
 
+import { NotificationBell } from '@/components/NotificationBell';
 import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
 import { getStats, type Stats } from '../../../services/user';
 
@@ -197,6 +198,7 @@ export default function HomeScreen() {
 				showsVerticalScrollIndicator={false}
 			>
 				<View style={[styles.profileRow, { paddingTop: Math.max(insets.top, 10) }]}>
+					<NotificationBell />
 					<Image
 						accessibilityLabel="Notificações"
 						contentFit="contain"
@@ -322,7 +324,7 @@ const styles = StyleSheet.create({
 	content: { paddingHorizontal: 24, paddingTop: 14 },
 
 	profileRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-	notificationIcon: { height: 26, width: 26 },
+	notificationIcon: { height: 0, width: 0 },
 	avatar: {
 		alignItems: 'center',
 		borderColor: '#FFFFFF',

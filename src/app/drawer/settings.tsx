@@ -126,6 +126,8 @@ export default function SettingsScreen() {
 									router.push(item.href);
 								} else if (item.id === 'notifications') {
 									router.push('/drawer/notifications');
+								} else if (item.id === 'blocked') {
+									router.push('/drawer/blocked' as Href);
 								}
 							}}
 							style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}

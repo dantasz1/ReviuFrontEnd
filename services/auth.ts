@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCalendars } from 'expo-localization';
 import type { OnboardingAnswers } from './onboarding';
 
 import { AUTH_TOKEN_KEY, USER_NAME_KEY, request } from './decks';
@@ -107,8 +108,10 @@ export type RegisterInput = {
 } & OnboardingAnswers;
 
 export function register(data: RegisterInput) {
+	const timezone = getCalendars()[0]?.timeZone ?? 'UTC';
+
 	return request<void>('/auth/register', {
-		body: JSON.stringify(data),
+		body: JSON.stringify({ ...data, timezone }),
 		method: 'POST',
 	});
 }

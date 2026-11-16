@@ -9,7 +9,7 @@ import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
 
 import { NotificationBell } from '@/components/NotificationBell';
 import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
-import { getStats, type Stats } from '../../../services/user';
+import { getStats, getUserInfo, type Stats } from '../../../services/user';
 
 const colors = {
 	ink: '#151515',
@@ -126,10 +126,11 @@ export default function HomeScreen() {
 				setError('');
 
 				
-				const [decksResult, nameResult, statsResult] = await Promise.allSettled([
+				const [decksResult, nameResult, statsResult, userInfoResult] = await Promise.allSettled([
 					getDecks(),
 					AsyncStorage.getItem(USER_NAME_KEY),
 					getStats(),
+					getUserInfo(),
 				]);
 
 				if (!active) return;
@@ -142,7 +143,9 @@ export default function HomeScreen() {
 				}
 
 				setUserName(nameResult.status === 'fulfilled' && nameResult.value ? nameResult.value : '');
-				setStats(statsResult.status === 'fulfilled' ? statsResult.value : emptyStats);
+				const baseStats = statsResult.status === 'fulfilled' ? statsResult.value : emptyStats;
+				const currentStreak = userInfoResult.status === 'fulfilled' ? userInfoResult.value.currentStreak : baseStats.streak;
+				setStats({ ...baseStats, streak: currentStreak });
 				setLoading(false);
 			})();
 
@@ -159,16 +162,23 @@ export default function HomeScreen() {
 		.sort((a, b) => b.due - a.due);
 
 	const pendingCount = pendingDecks.length;
+	const hasDecks = decks.length > 0;
+	const totalCards = decks.reduce((total, deck) => total + (deck.cards?.length ?? 0), 0);
+	const hasCards = totalCards > 0;
 	const shownDecks = pendingDecks.slice(0, 2);
 	const firstName = firstNameOf(userName);
 	const initial = firstName.charAt(0).toUpperCase();
 
 	
-	const streakMessage = stats.studiedToday
-		? ['Você já estudou hoje.', 'Volte amanhã!']
-		: stats.streak > 0
-			? ['Estude hoje para', 'manter sua ofensiva.']
-			: ['Estude hoje para', 'começar sua ofensiva.'];
+	const streakMessage = !hasDecks
+		? ['Crie seu primeiro deck para', 'começar sua ofensiva.']
+		: !hasCards
+			? ['Adicione cards para', 'começar sua ofensiva.']
+			: stats.studiedToday
+				? ['Você já estudou hoje.', 'Volte amanhã!']
+				: stats.streak > 0
+					? ['Estude hoje para', 'manter sua ofensiva.']
+					: ['Estude hoje para', 'começar sua ofensiva.'];
 
 	const colorFor = (deck: Deck) => deck.color ?? deckAccents[deck.id % deckAccents.length];
 
@@ -214,6 +224,10 @@ export default function HomeScreen() {
 				<Text style={styles.subtitle}>
 					{loading ? (
 						' '
+					) : !hasDecks ? (
+						'Comece criando seu primeiro deck'
+					) : !hasCards ? (
+						'Você já tem decks. Agora adicione seus primeiros cards'
 					) : pendingCount > 0 ? (
 						<>
 							Você tem{' '}
@@ -258,7 +272,7 @@ export default function HomeScreen() {
 						autoPlay
 						loop
 						source={require('@/assets/lotties/Businessman flies up with rocket.json')}
-						style={styles.streakAnimation}
+						style={[styles.streakAnimation, screenW < 360 && styles.streakAnimationCompact]}
 					/>
 					<View style={styles.streakCopy}>
 						<Text style={styles.streakTitle}>{streakMessage[0]}</Text>
@@ -280,8 +294,25 @@ export default function HomeScreen() {
 				{loading ? <ActivityIndicator color={colors.blue} style={styles.state} /> : null}
 				{error ? <Text style={styles.stateText}>{error}</Text> : null}
 
-				{!loading && !error && decks.length === 0 ? (
-					<Text style={styles.stateText}>Você ainda não tem decks. Crie o primeiro na aba Decks.</Text>
+				{!loading && !error && !hasDecks ? (
+					<View style={styles.emptyState}>
+						<Text style={styles.emptyStateTitle}>Sua jornada começa aqui</Text>
+						<Text style={styles.stateText}>Crie seu primeiro deck para organizar seus estudos e começar a revisar.</Text>
+						<Pressable
+							accessibilityRole="button"
+							onPress={() => router.push('/drawer/decks')}
+							style={({ pressed }) => [styles.emptyStateButton, pressed && styles.pressed]}
+						>
+							<Text style={styles.emptyStateButtonText}>Criar primeiro deck</Text>
+						</Pressable>
+					</View>
+				) : null}
+
+				{!loading && !error && hasDecks && !hasCards ? (
+					<View style={styles.emptyState}>
+						<Text style={styles.emptyStateTitle}>Seus decks estão prontos</Text>
+						<Text style={styles.stateText}>Adicione cards a um deck para começar a estudar.</Text>
+					</View>
 				) : null}
 
 				<View style={styles.decksGrid}>
@@ -305,14 +336,14 @@ export default function HomeScreen() {
 					{shownDecks.length === 1 ? <View style={styles.deckSpacer} /> : null}
 				</View>
 
-				<Pressable
+				{hasDecks ? <Pressable
 					accessibilityRole="button"
 					android_ripple={undefined}
 					onPress={() => router.push('/drawer/decks')}
 					style={styles.seeAllButton}
 				>
 					<Text style={styles.seeAll}>Ver todos os decks</Text>
-				</Pressable>
+				</Pressable> : null}
 			</ScrollView>
 		</View>
 	);
@@ -373,7 +404,8 @@ const styles = StyleSheet.create({
 
 	streakRow: { alignItems: 'center', flexDirection: 'row', height: 120, marginTop: 14 },
 	streakAnimation: { height: 130, marginLeft: -14, width: 200 },
-	streakCopy: { flex: 1, paddingRight: 7 },
+	streakAnimationCompact: { marginLeft: -22, width: 172 },
+	streakCopy: { flex: 1, minWidth: 0, paddingRight: 7 },
 	streakTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'right' },
 
 	deckHeadingRow: { alignItems: 'center', flexDirection: 'row', gap: 5, marginBottom: 16, marginTop: 5 },
@@ -391,6 +423,20 @@ const styles = StyleSheet.create({
 
 	state: { marginTop: 24 },
 	stateText: { color: '#5A5A66', fontSize: 14, marginTop: 20, textAlign: 'center' },
+	emptyState: { alignItems: 'center', marginTop: 4 },
+	emptyStateTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'center' },
+	emptyStateButton: {
+		alignItems: 'center',
+		backgroundColor: colors.blue,
+		borderRadius: 12,
+		elevation: 3,
+		justifyContent: 'center',
+		marginTop: 18,
+		minHeight: 46,
+		paddingHorizontal: 18,
+	},
+	emptyStateButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+	pressed: { opacity: 0.78 },
 
 	decksGrid: { flexDirection: 'row', gap: 15 },
 	deckSpacer: { flex: 1 },

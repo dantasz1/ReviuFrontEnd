@@ -1,5 +1,4 @@
 import { request } from './decks';
-
 export type Person = {
 	id: number;
 	name: string;
@@ -104,4 +103,18 @@ export async function rejectFriendRequest(senderId: number) {
 
 export async function cancelFriendRequest(receiverId: number) {
 	return request<void>(`/user/friends/request/${receiverId}/cancel`, { method: 'DELETE' });
+}
+
+export async function getBlockedUsers(): Promise<Person[]> {
+	const data = await request<unknown>('/user/blocked');
+	if (!Array.isArray(data)) return [];
+	return data.map(toPerson).filter((person): person is Person => person !== null);
+}
+
+export async function blockUser(userId: number) {
+	return request<void>(`/user/blocked/${userId}`, { method: 'POST' });
+}
+
+export async function unblockUser(userId: number) {
+	return request<void>(`/user/blocked/${userId}`, { method: 'DELETE' });
 }

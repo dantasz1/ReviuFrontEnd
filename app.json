@@ -32,7 +32,8 @@
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -46,7 +46,7 @@ export default function ProfileScreen() {
 		} catch (e) {
 			
 			const savedName = await AsyncStorage.getItem(USER_NAME_KEY);
-			setInfo(savedName ? { name: savedName, username: '', email: '' } : null);
+			setInfo(savedName ? { name: savedName, username: '', email: '', currentStreak: 0 } : null);
 			setError(e instanceof Error ? e.message : 'Não foi possível carregar seu perfil.');
 		} finally {
 			setLoading(false);

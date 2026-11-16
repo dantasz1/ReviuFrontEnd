@@ -4,6 +4,7 @@ export type UserInfo = {
 	name: string;
 	username: string;
 	email: string;
+	currentStreak: number;
 };
 
 export type Stats = {
@@ -29,10 +30,13 @@ export async function getUserInfo(): Promise<UserInfo> {
 	const nested = asRecord(raw.user ?? raw.data);
 	const source = Object.keys(nested).length > 0 ? nested : raw;
 
+	const currentStreak = Number(source.currentStreak);
+
 	return {
 		name: pickText(source.name, source.nome),
 		username: pickText(source.username, source.userName),
 		email: pickText(source.email),
+		currentStreak: Number.isFinite(currentStreak) && currentStreak >= 0 ? currentStreak : 0,
 	};
 }
 

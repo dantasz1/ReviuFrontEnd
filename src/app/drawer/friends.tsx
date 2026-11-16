@@ -33,6 +33,7 @@ import {
 	type Person,
 	type UserInfo,
 	acceptFriendRequest,
+	blockUser,
 	cancelFriendRequest,
 	getFriendRequests,
 	getFriends,
@@ -90,7 +91,7 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl?: string }) {
 function FriendRow({ person, onLongPress }: { person: Person; onLongPress: () => void }) {
 	return (
 		<Pressable
-			accessibilityHint="Segure para desfazer a amizade"
+			accessibilityHint="Segure para ver as opções de amizade e bloqueio"
 			accessibilityRole="button"
 			onLongPress={onLongPress}
 			style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -520,6 +521,18 @@ export default function FriendsScreen() {
 		}
 	};
 
+	const handleBlock = (person: Person) => {
+		Alert.alert('Bloquear usuário', `Você não receberá mais interações de ${person.name}. Deseja continuar?`, [
+			{ text: 'Cancelar', style: 'cancel' },
+			{
+				text: 'Bloquear',
+				style: 'destructive',
+				onPress: () => runAction(`block-${person.id}`, () => blockUser(person.id), 'Não foi possível bloquear'),
+			},
+			{ text: 'Desfazer amizade', onPress: () => handleUnfriend(person) },
+		]);
+	};
+
 	const handleUnfriend = (person: Person) => {
 		Alert.alert('Desfazer amizade', `Tem certeza que deseja remover ${person.name} dos seus amigos?`, [
 			{ text: 'Cancelar', style: 'cancel' },
@@ -724,7 +737,7 @@ export default function FriendsScreen() {
 
 				<View style={styles.list}>
 					{visibleFriends.map((person) => (
-						<FriendRow key={person.id} onLongPress={() => handleUnfriend(person)} person={person} />
+						<FriendRow key={person.id} onLongPress={() => handleBlock(person)} person={person} />
 					))}
 				</View>
 

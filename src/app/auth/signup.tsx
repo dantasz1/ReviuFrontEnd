@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getOnboardingAnswersForApi } from '@/data/onboarding';
-import { register } from '../../../services/auth';
+import { register, setPendingLoginCredentials } from '../../../services/auth';
 
 const PENDING_EMAIL_KEY = '@reviu/pending-email';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -130,6 +130,7 @@ export default function SignupScreen() {
 				retencaoConteudo: answers.retencaoConteudo ?? 'Esqueço fácil',
 				ritmoRevisao: answers.ritmoRevisao ?? 'Leve',
 			});
+			setPendingLoginCredentials(email, values.password);
 
 			// Guarda o e-mail para a tela de verificação não perdê-lo
 			await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);

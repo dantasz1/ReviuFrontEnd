@@ -9,6 +9,25 @@ type LoginResponse = {
 	token: string;
 };
 
+type PendingLoginCredentials = {
+	email: string;
+	password: string;
+};
+
+let pendingLoginCredentials: PendingLoginCredentials | null = null;
+
+export function setPendingLoginCredentials(email: string, password: string) {
+	pendingLoginCredentials = { email, password };
+}
+
+export function getPendingLoginCredentials() {
+	return pendingLoginCredentials;
+}
+
+export function clearPendingLoginCredentials() {
+	pendingLoginCredentials = null;
+}
+
 function isLoginResponse(value: unknown): value is LoginResponse {
 	if (typeof value !== 'object' || value === null) {
 		return false;

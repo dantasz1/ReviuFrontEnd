@@ -5,7 +5,13 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { completeOnboarding } from '@/data/onboarding';
-import { resendVerification, verifyEmail } from '../../../services/auth';
+import {
+	clearPendingLoginCredentials,
+	getPendingLoginCredentials,
+	login,
+	resendVerification,
+	verifyEmail,
+} from '../../../services/auth';
 
 const PENDING_EMAIL_KEY = '@reviu/pending-email';
 const RESEND_SECONDS = 30;
@@ -55,6 +61,14 @@ export default function VerifyScreen() {
 			await verifyEmail(email, code);
 			await completeOnboarding();
 			await AsyncStorage.removeItem(PENDING_EMAIL_KEY);
+			const credentials = getPendingLoginCredentials();
+			if (credentials?.email === email) {
+				await login(credentials.email, credentials.password);
+				clearPendingLoginCredentials();
+				router.replace('/drawer/home');
+				return;
+			}
+
 			router.replace('/auth/login');
 		} catch (e) {
 			setMessage(e instanceof Error ? e.message : 'Código inválido.');

@@ -20,8 +20,8 @@ export type Deck = { id: number; name: string; color?: string | null; cards: Dec
 export type CardInput = {
 	frontText: string;
 	backText: string;
-	imageUrl?: string;
-	audioUrl?: string;
+	imageUrl: string;
+	audioUrl: string;
 };
 
 
@@ -170,6 +170,12 @@ export function getDueCards(deckId: number) {
 }
 
 export function createCard(deckId: number, data: CardInput) {
+	console.log('[CREATE CARD REQUEST]', {
+		deckId,
+		fields: Object.keys(data),
+		frontTextHasLessThan: data.frontText.includes('<'),
+		backTextHasLessThan: data.backText.includes('<'),
+	});
 	return request<DeckCard>(`/decks/${deckId}/cards`, { body: JSON.stringify(data), method: 'POST' });
 }
 
@@ -237,6 +243,8 @@ export function extractGeneratedCards(result: unknown): CardInput[] {
 		.map((item) => ({
 			frontText: String(item.frontText ?? '').trim(),
 			backText: String(item.backText ?? '').trim(),
+			imageUrl: String(item.imageUrl ?? '-').trim() || '-',
+			audioUrl: String(item.audioUrl ?? '-').trim() || '-',
 		}))
 		.filter((card) => card.frontText.length > 0 && card.backText.length > 0);
 }

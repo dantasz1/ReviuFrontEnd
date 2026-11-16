@@ -5,7 +5,7 @@ import LottieView from 'lottie-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
+import Svg, { Circle, Polygon } from 'react-native-svg';
 
 import { NotificationBell } from '@/components/NotificationBell';
 import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
@@ -170,15 +170,18 @@ export default function HomeScreen() {
 	const initial = firstName.charAt(0).toUpperCase();
 
 	
-	const streakMessage = !hasDecks
-		? ['Crie seu primeiro deck para', 'começar sua ofensiva.']
-		: !hasCards
-			? ['Adicione cards para', 'começar sua ofensiva.']
-			: stats.studiedToday
-				? ['Você já estudou hoje.', 'Volte amanhã!']
-				: stats.streak > 0
-					? ['Estude hoje para', 'manter sua ofensiva.']
-					: ['Estude hoje para', 'começar sua ofensiva.'];
+	const weekLabels = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+	const todayIndex = (new Date().getDay() + 6) % 7;
+	const previousCompletedDays = stats.studiedToday ? Math.max(stats.streak - 1, 0) : stats.streak;
+	const streakDays = weekLabels.map((label, index) => {
+		const isToday = index === todayIndex;
+		const daysBeforeToday = todayIndex - index;
+		const completed = isToday
+			? stats.studiedToday
+			: daysBeforeToday > 0 && daysBeforeToday <= previousCompletedDays;
+
+		return { completed, isToday, label };
+	});
 
 	const colorFor = (deck: Deck) => deck.color ?? deckAccents[deck.id % deckAccents.length];
 
@@ -242,41 +245,39 @@ export default function HomeScreen() {
 				</Text>
 
 				
-				<View style={styles.coinsCard}>
-					<View pointerEvents="none" style={styles.coinsClip}>
-						<Svg height="100%" preserveAspectRatio="none" viewBox="0 0 100 100" width="100%">
-							<Ellipse cx={50} cy={115} fill={colors.blueDark} rx={80} ry={65} />
-						</Svg>
+				<View accessibilityLabel={`Sua ofensiva: ${stats.streak} dias`} style={styles.streakCard}>
+					<View style={styles.streakHeader}>
+						<View style={styles.streakHeading}>
+							<LottieView
+								ref={fireRef}
+								autoPlay
+								loop
+								resizeMode="contain"
+								speed={1.5}
+								source={require('@/assets/lotties/Fire animation.json')}
+								style={styles.streakFire}
+							/>
+							<Text style={styles.streakLabel}>Sua ofensiva</Text>
+						</View>
+						<Text style={styles.streakCount}>{stats.streak} dias</Text>
 					</View>
-					<LottieView
-						ref={fireRef}
-						autoPlay
-						loop
-						resizeMode="contain"
-						speed={1.5}
-						source={require('@/assets/lotties/Fire animation.json')}
-						style={[
-							styles.coinsAnimation,
-							stats.streak === 0 && !stats.studiedToday && { opacity: 0.5 },
-						]}
-					/>
-					<View style={styles.coinsCopy}>
-						<Text style={styles.coinsLabel}>Sua ofensiva</Text>
-						<Text style={styles.coinsValue}>{stats.streak}</Text>
-						<Text style={styles.coinsLabel}>{stats.streak === 1 ? 'dia' : 'dias'}</Text>
-					</View>
-				</View>
 
-				<View style={styles.streakRow}>
-					<LottieView
-						autoPlay
-						loop
-						source={require('@/assets/lotties/Businessman flies up with rocket.json')}
-						style={[styles.streakAnimation, screenW < 360 && styles.streakAnimationCompact]}
-					/>
-					<View style={styles.streakCopy}>
-						<Text style={styles.streakTitle}>{streakMessage[0]}</Text>
-						<Text style={styles.streakTitle}>{streakMessage[1]}</Text>
+					<View style={styles.weekRow}>
+						{streakDays.map((day, index) => (
+							<View key={`${day.label}-${index}`} style={styles.weekDay}>
+								<View
+									style={[
+										styles.dayCircle,
+										day.completed && styles.dayCircleCompleted,
+										day.isToday && !day.completed && styles.dayCircleToday,
+										!day.completed && !day.isToday && styles.dayCircleFuture,
+									]}
+								>
+									{day.completed ? <Text style={styles.dayCheck}>✓</Text> : null}
+								</View>
+								<Text style={styles.dayLabel}>{day.label}</Text>
+							</View>
+						))}
 					</View>
 				</View>
 
@@ -375,38 +376,32 @@ const styles = StyleSheet.create({
 	subtitle: { color: colors.ink, fontSize: 16, fontWeight: '600', marginTop: 4 },
 	subtitleHighlight: { color: '#F12764', fontWeight: '900' },
 
-	coinsCard: {
-		alignItems: 'center',
+	streakCard: {
 		backgroundColor: colors.blue,
-		borderRadius: 16,
+		borderRadius: 20,
 		elevation: 5,
-		flexDirection: 'row',
-		height: 112,
+		height: 164,
 		marginTop: 52,
-		paddingLeft: 12,
+		paddingHorizontal: 18,
+		paddingVertical: 18,
 		shadowColor: colors.blueDark,
 		shadowOffset: { height: 5, width: 0 },
 		shadowOpacity: 0.35,
 		shadowRadius: 3,
 	},
-	coinsClip: { ...StyleSheet.absoluteFill, borderRadius: 16, overflow: 'hidden' },
-	coinsAnimation: {
-		bottom: 10,
-		height: 170,
-		left: 0,
-		pointerEvents: 'none',
-		position: 'absolute',
-		width: 220,
-	},
-	coinsCopy: { alignItems: 'flex-end', flex: 1, paddingRight: 18, zIndex: 1 },
-	coinsLabel: { color: '#DCE4FF', fontSize: 15, fontWeight: '600' },
-	coinsValue: { color: '#FFFFFF', fontSize: 40, fontWeight: '900', lineHeight: 44 },
-
-	streakRow: { alignItems: 'center', flexDirection: 'row', height: 120, marginTop: 14 },
-	streakAnimation: { height: 130, marginLeft: -14, width: 200 },
-	streakAnimationCompact: { marginLeft: -22, width: 172 },
-	streakCopy: { flex: 1, minWidth: 0, paddingRight: 7 },
-	streakTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'right' },
+	streakHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+	streakHeading: { alignItems: 'center', flexDirection: 'row' },
+	streakFire: { height: 36, marginLeft: -5, marginRight: 4, width: 36 },
+	streakLabel: { color: '#DCE4FF', fontSize: 17, fontWeight: '700' },
+	streakCount: { color: '#FFFFFF', fontSize: 26, fontWeight: '900' },
+	weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+	weekDay: { alignItems: 'center', gap: 8 },
+	dayCircle: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
+	dayCircleCompleted: { backgroundColor: colors.yellow },
+	dayCircleToday: { borderColor: '#FFFFFF', borderWidth: 3 },
+	dayCircleFuture: { backgroundColor: 'rgba(167, 194, 255, 0.38)' },
+	dayCheck: { color: '#493B00', fontSize: 27, fontWeight: '800', lineHeight: 30 },
+	dayLabel: { color: '#DCE4FF', fontSize: 15, fontWeight: '700' },
 
 	deckHeadingRow: { alignItems: 'center', flexDirection: 'row', gap: 5, marginBottom: 16, marginTop: 5 },
 	deckHeading: { color: colors.ink, fontSize: 17, fontWeight: '700' },

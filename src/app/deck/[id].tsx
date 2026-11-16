@@ -1,4 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -27,6 +29,8 @@ import {
 	getCards,
 	getDueCards,
 	reviewCard,
+	type PickedFile,
+	uploadCardFile,
 } from '../../../services/decks';
 
 const colors = {
@@ -65,6 +69,22 @@ function StudySession({
 	const [error, setError] = useState('');
 
 	const card = cards[index];
+	const imageSource = card.imageUrl && card.imageUrl !== '-' ? card.imageUrl : null;
+	const audioSource = card.audioUrl && card.audioUrl !== '-' ? card.audioUrl : null;
+	const audioPlayer = useAudioPlayer(audioSource);
+	const audioStatus = useAudioPlayerStatus(audioPlayer);
+
+	const toggleAudio = () => {
+		if (audioStatus.playing) {
+			audioPlayer.pause();
+			return;
+		}
+
+		if (audioStatus.duration > 0 && audioStatus.currentTime >= audioStatus.duration) {
+			audioPlayer.seekTo(0);
+		}
+		audioPlayer.play();
+	};
 
 	const handleRate = async (quality: number) => {
 		if (saving) return;
@@ -93,9 +113,23 @@ function StudySession({
 
 			<Pressable onPress={() => setFlipped((value) => !value)} style={styles.studyCard}>
 				<Text style={styles.studySide}>{flipped ? 'Resposta' : 'Pergunta'}</Text>
+				{!flipped && imageSource ? (
+					<Image
+						accessibilityLabel="Imagem do card"
+						contentFit="contain"
+						source={imageSource}
+						style={styles.studyImage}
+					/>
+				) : null}
 				<Text style={styles.studyText}>{flipped ? card.backText : card.frontText}</Text>
 				{!flipped && <Text style={styles.studyHint}>Toque para ver a resposta</Text>}
 			</Pressable>
+
+			{!flipped && audioSource ? (
+				<Pressable onPress={toggleAudio} style={styles.audioButton}>
+					<Text style={styles.audioButtonText}>{audioStatus.playing ? 'Pausar áudio' : '▶ Ouvir áudio'}</Text>
+				</Pressable>
+			) : null}
 
 			{error ? <Text style={styles.errorDark}>{error}</Text> : null}
 
@@ -130,13 +164,19 @@ function AddCardModal({
 	visible,
 	onClose,
 	onSave,
+	onUploadFile,
 }: {
 	visible: boolean;
 	onClose: () => void;
-	onSave: (frontText: string, backText: string) => Promise<void>;
+	onSave: (frontText: string, backText: string, imageUrl: string, audioUrl: string) => Promise<void>;
+	onUploadFile: (file: PickedFile) => Promise<string>;
 }) {
 	const [front, setFront] = useState('');
 	const [back, setBack] = useState('');
+	const [imageUrl, setImageUrl] = useState('');
+	const [audioUrl, setAudioUrl] = useState('');
+	const [imageName, setImageName] = useState('');
+	const [audioName, setAudioName] = useState('');
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState('');
 
@@ -145,8 +185,46 @@ function AddCardModal({
 	const close = () => {
 		setFront('');
 		setBack('');
+		setImageUrl('');
+		setAudioUrl('');
+		setImageName('');
+		setAudioName('');
 		setError('');
 		onClose();
+	};
+
+	const pickFile = async (kind: 'image' | 'audio') => {
+		setError('');
+		try {
+			const result = await DocumentPicker.getDocumentAsync({
+				copyToCacheDirectory: true,
+				type: kind === 'image' ? 'image/*' : 'audio/*',
+			});
+
+			if (result.canceled) return;
+
+			setSaving(true);
+			const asset = result.assets[0];
+			const file: PickedFile = {
+				mimeType: asset.mimeType,
+				name: asset.name,
+				size: asset.size,
+				uri: asset.uri,
+			};
+			const uploadedUrl = await onUploadFile(file);
+
+			if (kind === 'image') {
+				setImageName(asset.name);
+				setImageUrl(uploadedUrl);
+			} else {
+				setAudioName(asset.name);
+				setAudioUrl(uploadedUrl);
+			}
+		} catch (pickError) {
+			setError(messageOf(pickError, 'Não foi possível enviar o arquivo.'));
+		} finally {
+			setSaving(false);
+		}
 	};
 
 	const handleSave = async () => {
@@ -154,7 +232,7 @@ function AddCardModal({
 		setSaving(true);
 		setError('');
 		try {
-			await onSave(front.trim(), back.trim());
+			await onSave(front.trim(), back.trim(), imageUrl.trim(), audioUrl.trim());
 			close();
 		} catch (e) {
 			setError(messageOf(e, 'Não foi possível criar o card.'));
@@ -190,6 +268,16 @@ function AddCardModal({
 						style={styles.input}
 						value={back}
 					/>
+
+					<Text style={[styles.modalLabel, { marginTop: 16 }]}>Imagem (opcional)</Text>
+					<Pressable disabled={saving} onPress={() => void pickFile('image')} style={styles.fileButton}>
+						<Text style={styles.fileButtonText}>{imageName || 'Escolher imagem do celular'}</Text>
+					</Pressable>
+
+					<Text style={[styles.modalLabel, { marginTop: 16 }]}>URL do áudio (opcional)</Text>
+					<Pressable disabled={saving} onPress={() => void pickFile('audio')} style={styles.fileButton}>
+						<Text style={styles.fileButtonText}>{audioName || 'Escolher áudio do celular'}</Text>
+					</Pressable>
 
 					{error ? <Text style={styles.errorDark}>{error}</Text> : null}
 
@@ -245,9 +333,19 @@ export default function DeckDetailScreen() {
 		queueMicrotask(() => void load());
 	}, [load]);
 
-	const handleCreate = async (frontText: string, backText: string) => {
-		await createCard(deckId, { frontText, backText });
+	const handleCreate = async (frontText: string, backText: string, imageUrl: string, audioUrl: string) => {
+		await createCard(deckId, {
+			frontText,
+			backText,
+			imageUrl: imageUrl || '-',
+			audioUrl: audioUrl || '-',
+		});
 		await load();
+	};
+
+	const handleUploadCardFile = async (file: PickedFile) => {
+		const result = await uploadCardFile(deckId, file);
+		return result.url;
 	};
 
 	const handleDelete = (card: DeckCard) => {
@@ -439,7 +537,12 @@ export default function DeckDetailScreen() {
 				</View>
 			)}
 
-			<AddCardModal onClose={() => setShowAdd(false)} onSave={handleCreate} visible={showAdd} />
+			<AddCardModal
+				onClose={() => setShowAdd(false)}
+				onSave={handleCreate}
+				onUploadFile={handleUploadCardFile}
+				visible={showAdd}
+			/>
 
 			
 			<Modal animationType="fade" statusBarTranslucent transparent visible={generating}>
@@ -578,9 +681,18 @@ const styles = StyleSheet.create({
 		minHeight: 280,
 		padding: 24,
 	},
+	studyImage: { height: 120, marginTop: 16, width: '100%' },
 	studySide: { color: colors.blue, fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
 	studyText: { color: colors.ink, fontSize: 26, fontWeight: '800', marginTop: 12, textAlign: 'center' },
 	studyHint: { color: colors.muted, fontSize: 13, marginTop: 20 },
+	audioButton: {
+		alignItems: 'center',
+		backgroundColor: colors.blue,
+		borderRadius: 12,
+		marginTop: 14,
+		paddingVertical: 12,
+	},
+	audioButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
 	ratingRow: { flexDirection: 'row', gap: 8, marginTop: 20 },
 	ratingButton: { alignItems: 'center', borderRadius: 12, flex: 1, paddingVertical: 14 },
 	ratingText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
@@ -608,6 +720,17 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 12,
 		paddingVertical: 10,
 	},
+	fileButton: {
+		backgroundColor: '#EEF3FF',
+		borderColor: colors.blue,
+		borderRadius: 10,
+		borderWidth: 1,
+		justifyContent: 'center',
+		marginTop: 8,
+		minHeight: 48,
+		paddingHorizontal: 12,
+	},
+	fileButtonText: { color: colors.blue, fontSize: 15, fontWeight: '700' },
 	modalButton: {
 		alignItems: 'center',
 		backgroundColor: colors.yellow,

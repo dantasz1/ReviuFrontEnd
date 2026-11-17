@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
+import { getCalendars } from 'expo-localization';
 import { router, useFocusEffect } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -8,8 +9,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Polygon } from 'react-native-svg';
 
 import { NotificationBell } from '@/components/NotificationBell';
-import { type Deck, getDecks, USER_NAME_KEY } from '../../../services/decks';
-import { getStats, getUserInfo, type Stats } from '../../../services/user';
+import { type Deck, getDecks, getDueCards, USER_NAME_KEY } from '../../../services/decks';
+import { getStats, getUserInfo, type Stats, updateUserTimezone } from '../../../services/user';
 
 const colors = {
 	ink: '#151515',
@@ -35,18 +36,56 @@ function adjustColor(color: string, factor: number) {
 }
 
 
-function todayKey() {
+function todayKey(timeZone?: string) {
+	if (timeZone) {
+		try {
+			const parts = new Intl.DateTimeFormat('en-US', {
+				day: '2-digit',
+				month: '2-digit',
+				timeZone,
+				year: 'numeric',
+			}).formatToParts(new Date());
+			const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+			return `${values.year}-${values.month}-${values.day}`;
+		} catch {
+			// Use the device date if the API timezone is not supported by the runtime.
+		}
+	}
+
 	const now = new Date();
 	const month = String(now.getMonth() + 1).padStart(2, '0');
 	const day = String(now.getDate()).padStart(2, '0');
 	return `${now.getFullYear()}-${month}-${day}`;
 }
 
+function dateKeyInTimeZone(value: string | undefined, timeZone?: string) {
+	const rawValue = value?.trim();
+	if (!rawValue) return '';
+	if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) return rawValue;
 
-function countDue(deck: Deck) {
-	const today = todayKey();
-	return (deck.cards ?? []).filter((card) => !card.nextReview || card.nextReview.slice(0, 10) <= today).length;
+	const date = new Date(rawValue);
+	if (Number.isNaN(date.getTime())) return rawValue.slice(0, 10);
+
+	try {
+		const parts = new Intl.DateTimeFormat('en-US', {
+			day: '2-digit',
+			month: '2-digit',
+			timeZone,
+			year: 'numeric',
+		}).formatToParts(date);
+		const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+		return `${values.year}-${values.month}-${values.day}`;
+	} catch {
+		return rawValue.slice(0, 10);
+	}
 }
+
+function addDays(dateKey: string, amount: number) {
+	const date = new Date(`${dateKey}T00:00:00Z`);
+	date.setUTCDate(date.getUTCDate() + amount);
+	return date.toISOString().slice(0, 10);
+}
+
 
 function firstNameOf(fullName: string) {
 	const first = fullName.trim().split(/\s+/)[0] ?? '';
@@ -107,7 +146,10 @@ export default function HomeScreen() {
 	const curveSize = 1400;
 
 	const [decks, setDecks] = useState<Deck[]>([]);
+	const [dueCounts, setDueCounts] = useState<Record<number, number>>({});
 	const [userName, setUserName] = useState('');
+	const [userTimezone, setUserTimezone] = useState('');
+	const [lastReviewDate, setLastReviewDate] = useState('');
 	const [stats, setStats] = useState<Stats>(emptyStats);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState('');
@@ -124,8 +166,11 @@ export default function HomeScreen() {
 
 			(async () => {
 				setError('');
+				setDueCounts({});
 
-				
+				const deviceTimezone =
+					getCalendars()[0]?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+
 				const [decksResult, nameResult, statsResult, userInfoResult] = await Promise.allSettled([
 					getDecks(),
 					AsyncStorage.getItem(USER_NAME_KEY),
@@ -136,7 +181,22 @@ export default function HomeScreen() {
 				if (!active) return;
 
 				if (decksResult.status === 'fulfilled') {
-					setDecks(decksResult.value);
+					const loadedDecks = decksResult.value;
+					setDecks(loadedDecks);
+
+					const dueResults = await Promise.allSettled(
+						loadedDecks.map(async (deck) => ({ deckId: deck.id, count: (await getDueCards(deck.id)).length })),
+					);
+
+					if (!active) return;
+
+					const nextDueCounts: Record<number, number> = {};
+					dueResults.forEach((result) => {
+						if (result.status === 'fulfilled') {
+							nextDueCounts[result.value.deckId] = result.value.count;
+						}
+					});
+					setDueCounts(nextDueCounts);
 				} else {
 					const reason = decksResult.reason;
 					setError(reason instanceof Error ? reason.message : 'Não foi possível carregar seus decks.');
@@ -144,8 +204,34 @@ export default function HomeScreen() {
 
 				setUserName(nameResult.status === 'fulfilled' && nameResult.value ? nameResult.value : '');
 				const baseStats = statsResult.status === 'fulfilled' ? statsResult.value : emptyStats;
-				const currentStreak = userInfoResult.status === 'fulfilled' ? userInfoResult.value.currentStreak : baseStats.streak;
-				setStats({ ...baseStats, streak: currentStreak });
+				const userInfo = userInfoResult.status === 'fulfilled' ? userInfoResult.value : null;
+				const effectiveTimezone = deviceTimezone || userInfo?.timezone || 'UTC';
+
+				if (userInfo && userInfo.timezone !== effectiveTimezone) {
+					try {
+						await updateUserTimezone(effectiveTimezone);
+					} catch (timezoneError) {
+						console.warn('[TIMEZONE SYNC]', {
+							error: timezoneError instanceof Error ? timezoneError.message : timezoneError,
+							requestedTimezone: effectiveTimezone,
+						});
+					}
+				}
+
+				if (!active) return;
+
+				const currentStreak = userInfo ? userInfo.currentStreak : baseStats.streak;
+				const reviewDateKey = dateKeyInTimeZone(userInfo?.lastReviewDate, effectiveTimezone);
+				const studiedTodayFromReviewDate = reviewDateKey
+					? reviewDateKey === todayKey(effectiveTimezone)
+					: null;
+				setUserTimezone(effectiveTimezone);
+				setLastReviewDate(reviewDateKey);
+				setStats({
+					...baseStats,
+					streak: currentStreak,
+					studiedToday: studiedTodayFromReviewDate ?? baseStats.studiedToday,
+				});
 				setLoading(false);
 			})();
 
@@ -157,7 +243,7 @@ export default function HomeScreen() {
 
 	
 	const pendingDecks = decks
-		.map((deck) => ({ deck, due: countDue(deck) }))
+		.map((deck) => ({ deck, due: dueCounts[deck.id] ?? 0 }))
 		.filter((item) => item.due > 0)
 		.sort((a, b) => b.due - a.due);
 
@@ -170,18 +256,38 @@ export default function HomeScreen() {
 	const initial = firstName.charAt(0).toUpperCase();
 
 	
-	const weekLabels = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
-	const todayIndex = (new Date().getDay() + 6) % 7;
-	const previousCompletedDays = stats.studiedToday ? Math.max(stats.streak - 1, 0) : stats.streak;
+	const weekLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+	const currentDateKey = todayKey(userTimezone);
+	const currentDate = new Date(`${currentDateKey}T00:00:00Z`);
+	const sundayOffset = currentDate.getUTCDay();
+	const completedDates = new Set(
+		(lastReviewDate && stats.streak > 0
+			? Array.from({ length: stats.streak }, (_, index) => addDays(lastReviewDate, -index))
+			: []
+		).filter((dateKey) => dateKey <= currentDateKey),
+	);
 	const streakDays = weekLabels.map((label, index) => {
-		const isToday = index === todayIndex;
-		const daysBeforeToday = todayIndex - index;
-		const completed = isToday
-			? stats.studiedToday
-			: daysBeforeToday > 0 && daysBeforeToday <= previousCompletedDays;
-
-		return { completed, isToday, label };
+		const dateKey = addDays(currentDateKey, index - sundayOffset);
+		return {
+			completed: dateKey <= currentDateKey && completedDates.has(dateKey),
+			dateKey,
+			isToday: dateKey === currentDateKey,
+			label,
+		};
 	});
+	const streakDebugKey = streakDays.map((day) => `${day.dateKey}:${day.completed ? '1' : '0'}`).join('|');
+
+	useEffect(() => {
+		if (__DEV__) {
+			console.log('[STREAK CALENDAR]', {
+				currentDateKey,
+				lastReviewDate,
+				streak: stats.streak,
+				timezone: userTimezone,
+				days: streakDebugKey,
+			});
+		}
+	}, [currentDateKey, lastReviewDate, stats.streak, streakDebugKey, userTimezone]);
 
 	const colorFor = (deck: Deck) => deck.color ?? deckAccents[deck.id % deckAccents.length];
 

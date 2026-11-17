@@ -5,6 +5,8 @@ export type UserInfo = {
 	username: string;
 	email: string;
 	currentStreak: number;
+	lastReviewDate?: string;
+	timezone?: string;
 };
 
 export type Stats = {
@@ -37,7 +39,16 @@ export async function getUserInfo(): Promise<UserInfo> {
 		username: pickText(source.username, source.userName),
 		email: pickText(source.email),
 		currentStreak: Number.isFinite(currentStreak) && currentStreak >= 0 ? currentStreak : 0,
+		lastReviewDate: pickText(source.lastReviewDate),
+		timezone: pickText(source.timezone),
 	};
+}
+
+export function updateUserTimezone(timezone: string) {
+	return request<void>('/user/timezone', {
+		body: JSON.stringify({ timezone }),
+		method: 'PUT',
+	});
 }
 
 export function getStats() {

@@ -313,6 +313,8 @@ export default function DeckDetailScreen() {
 	const [showAdd, setShowAdd] = useState(false);
 	const [studying, setStudying] = useState(false);
 	const [generating, setGenerating] = useState(false);
+	const [cardToDelete, setCardToDelete] = useState<DeckCard | null>(null);
+	const [deletingCard, setDeletingCard] = useState(false);
 
 	const accent = params.color ?? colors.yellow;
 
@@ -349,21 +351,24 @@ export default function DeckDetailScreen() {
 	};
 
 	const handleDelete = (card: DeckCard) => {
-		Alert.alert('Excluir card', 'Tem certeza que deseja excluir este card?', [
-			{ text: 'Cancelar', style: 'cancel' },
-			{
-				text: 'Excluir',
-				style: 'destructive',
-				onPress: async () => {
-					try {
-						await deleteCard(deckId, card.id);
-						await load();
-					} catch (e) {
-						setError(messageOf(e, 'Não foi possível excluir o card.'));
-					}
-				},
-			},
-		]);
+		setCardToDelete(card);
+	};
+
+	const confirmDeleteCard = async () => {
+		if (!cardToDelete || deletingCard) return;
+
+		setDeletingCard(true);
+		setError('');
+		try {
+			await deleteCard(deckId, cardToDelete.id);
+			setCardToDelete(null);
+			await load();
+		} catch (e) {
+			setError(messageOf(e, 'Não foi possível excluir o card.'));
+			setCardToDelete(null);
+		} finally {
+			setDeletingCard(false);
+		}
 	};
 
 
@@ -544,7 +549,53 @@ export default function DeckDetailScreen() {
 				visible={showAdd}
 			/>
 
-			
+			<Modal
+				animationType="fade"
+				onRequestClose={() => {
+					if (!deletingCard) setCardToDelete(null);
+				}}
+				transparent
+				visible={cardToDelete !== null}
+			>
+				<View style={styles.deleteBackdrop}>
+					<Pressable
+						accessibilityLabel="Cancelar exclusão"
+						disabled={deletingCard}
+						onPress={() => setCardToDelete(null)}
+						style={StyleSheet.absoluteFill}
+					/>
+					<View accessibilityRole="alert" style={styles.deleteCard}>
+						<Text style={styles.deleteTitle}>Excluir card</Text>
+						<Text style={styles.deleteMessage}>Tem certeza que deseja excluir este card?</Text>
+						<View style={styles.deleteActions}>
+							<Pressable
+								accessibilityRole="button"
+								disabled={deletingCard}
+								onPress={() => setCardToDelete(null)}
+								style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
+							>
+								<Text style={styles.deleteCancelText}>Cancelar</Text>
+							</Pressable>
+							<Pressable
+								accessibilityRole="button"
+								disabled={deletingCard}
+								onPress={confirmDeleteCard}
+								style={({ pressed }) => [
+									styles.deleteButton,
+									styles.deleteButtonDanger,
+									pressed && styles.pressed,
+									deletingCard && styles.disabled,
+								]}
+							>
+								<Text style={styles.deleteConfirmText}>
+									{deletingCard ? 'Excluindo...' : 'Excluir'}
+								</Text>
+							</Pressable>
+						</View>
+					</View>
+				</View>
+			</Modal>
+
 			<Modal animationType="fade" statusBarTranslucent transparent visible={generating}>
 				<View style={styles.generatingBackdrop}>
 					<View style={styles.generatingCard}>
@@ -661,6 +712,40 @@ const styles = StyleSheet.create({
 	},
 	generatingTitle: { color: colors.ink, fontSize: 20, fontWeight: '900', marginTop: 16 },
 	generatingText: { color: colors.muted, fontSize: 14, marginTop: 8, textAlign: 'center' },
+	deleteBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(17, 17, 17, 0.42)',
+		flex: 1,
+		justifyContent: 'center',
+		padding: 16,
+	},
+	deleteCard: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 16,
+		maxWidth: 380,
+		padding: 20,
+		width: '100%',
+	},
+	deleteTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
+	deleteMessage: { color: colors.muted, fontSize: 15, lineHeight: 21, marginTop: 8 },
+	deleteActions: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: 8,
+		justifyContent: 'flex-end',
+		marginTop: 20,
+	},
+	deleteButton: {
+		alignItems: 'center',
+		backgroundColor: colors.lilac,
+		borderRadius: 10,
+		justifyContent: 'center',
+		minHeight: 42,
+		paddingHorizontal: 14,
+	},
+	deleteButtonDanger: { backgroundColor: '#B91B5A' },
+	deleteCancelText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+	deleteConfirmText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
 	// Estudo
 	studyWrap: {

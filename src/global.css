@@ -7,3 +7,21 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+button[id$='-default-inactive'] img {
+  filter: brightness(0) saturate(100%) invert(32%);
+}
+
+button[id$='-default-active'] img {
+  filter: brightness(0) saturate(100%) invert(39%) sepia(91%) saturate(2444%) hue-rotate(207deg)
+    brightness(99%) contrast(97%);
+}
+
+button[id$='-deck-inactive'] img {
+  filter: brightness(0) invert(1);
+}
+
+button[id$='-deck-active'] img {
+  filter: brightness(0) saturate(100%) invert(81%) sepia(58%) saturate(743%) hue-rotate(4deg)
+    brightness(103%) contrast(98%);
+}

@@ -4,16 +4,17 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type NavigationItem = {
+	id: string;
 	label: string;
 	path?: Href;
 	icon: number;
 };
 
 const items: NavigationItem[] = [
-	{ label: 'Home', path: '/drawer/home', icon: require('@/assets/images/home/House.svg') },
-	{ label: 'Decks', path: '/drawer/decks', icon: require('@/assets/images/home/Cartas.svg') },
-	{ label: 'Amigos', path: '/drawer/friends', icon: require('@/assets/images/home/Friends.svg') },
-	{ label: 'Config.', path: '/drawer/settings', icon: require('@/assets/images/home/Config.svg') },
+	{ id: 'home', label: 'Home', path: '/drawer/home', icon: require('@/assets/images/home/House.svg') },
+	{ id: 'decks', label: 'Decks', path: '/drawer/decks', icon: require('@/assets/images/home/Cartas.svg') },
+	{ id: 'friends', label: 'Amigos', path: '/drawer/friends', icon: require('@/assets/images/home/Friends.svg') },
+	{ id: 'settings', label: 'Config.', path: '/drawer/settings', icon: require('@/assets/images/home/Config.svg') },
 ];
 
 export function BottomNavigation() {
@@ -24,10 +25,13 @@ export function BottomNavigation() {
 	return <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
 		{items.map((item) => {
 			const active = item.path ? pathname === item.path : false;
+			const iconContext = isDecksScreen ? 'deck' : 'default';
+			const iconState = active ? 'active' : 'inactive';
 			return <Pressable
 				accessibilityLabel={item.label}
 				accessibilityRole="button"
 				key={item.label}
+				nativeID={`bottom-nav-${item.id}-${iconContext}-${iconState}`}
 				onPress={() => item.path && router.replace(item.path)}
 				style={({ pressed }) => [styles.item, pressed && styles.pressed]}
 			>

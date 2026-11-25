@@ -5,7 +5,6 @@ import LottieView from 'lottie-react-native';
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
 	ActivityIndicator,
-	Alert,
 	KeyboardAvoidingView,
 	Modal,
 	Platform,
@@ -15,6 +14,7 @@ import {
 	StyleSheet,
 	Text,
 	TextInput,
+	useWindowDimensions,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +56,18 @@ const colors = {
 
 const avatarPalette = ['#C4574B', '#7A8CA5', '#D9A441', '#8A5A3C', '#5B8C6E', '#8B6BB5'];
 
+type InteractionAction = {
+	label: string;
+	onPress: () => void | Promise<void>;
+	destructive?: boolean;
+};
+
+type InteractionDialog = {
+	title: string;
+	message: string;
+	actions: InteractionAction[];
+};
+
 function avatarColorFor(name: string) {
 	if (!name) return '#D9D9D9';
 	const sum = Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0);
@@ -73,6 +85,61 @@ function normalize(text: string) {
 
 function messageOf(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
+}
+
+function UserInteractionModal({
+	dialog,
+	onClose,
+}: {
+	dialog: InteractionDialog | null;
+	onClose: () => void;
+}) {
+	return (
+		<Modal
+			animationType="fade"
+			onRequestClose={onClose}
+			transparent
+			visible={dialog !== null}
+		>
+			<View style={styles.interactionBackdrop}>
+				<Pressable
+					accessibilityLabel="Fechar mensagem"
+					onPress={onClose}
+					style={StyleSheet.absoluteFill}
+				/>
+				<View accessibilityRole="alert" style={styles.interactionCard}>
+					<Text style={styles.interactionTitle}>{dialog?.title}</Text>
+					<Text style={styles.interactionMessage}>{dialog?.message}</Text>
+					<View style={styles.interactionActions}>
+						{dialog?.actions.map((action) => (
+							<Pressable
+								accessibilityRole="button"
+								key={action.label}
+								onPress={() => {
+									onClose();
+									void action.onPress();
+								}}
+								style={({ pressed }) => [
+									styles.interactionButton,
+									action.destructive && styles.interactionButtonDestructive,
+									pressed && styles.pressed,
+								]}
+							>
+								<Text
+									style={[
+										styles.interactionButtonText,
+										action.destructive && styles.interactionButtonTextDestructive,
+									]}
+								>
+									{action.label}
+								</Text>
+							</Pressable>
+						))}
+					</View>
+				</View>
+			</View>
+		</Modal>
+	);
 }
 
 
@@ -243,6 +310,7 @@ function AddFriendModal({
 	statusFor: (person: Person) => 'me' | 'friend' | 'pending' | 'none';
 }) {
 	const [query, setQuery] = useState('');
+	const { height } = useWindowDimensions();
 	const [results, setResults] = useState<Person[]>([]);
 	const [searching, setSearching] = useState(false);
 	const [searched, setSearched] = useState(false);
@@ -306,132 +374,143 @@ function AddFriendModal({
 	};
 
 	const visibleResults = results.filter((person) => statusFor(person) !== 'me');
+	const compactWebModal = Platform.OS === 'web' && height < 720;
 
 	return (
 		<Modal animationType="fade" transparent visible={visible} onRequestClose={closeModal}>
 			<KeyboardAvoidingView
 				behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-				style={styles.modalBackdrop}
+				style={[styles.modalBackdrop, { maxHeight: height }]}
 			>
 				<Pressable accessibilityLabel="Fechar" accessibilityRole="button" onPress={closeModal} style={styles.modalDismissArea} />
 
-				<View style={styles.modalCard}>
+				<View style={[styles.modalCard, { maxHeight: height - 32 }]}>
 					<View pointerEvents="none" style={styles.modalCircle} />
 
-					<Pressable
-						accessibilityLabel="Fechar adicionar amigo"
-						accessibilityRole="button"
-						onPress={closeModal}
-						style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-					>
-						<View style={styles.closeLineOne} />
-						<View style={styles.closeLineTwo} />
-					</Pressable>
+					<View style={styles.modalContent}>
+						<Pressable
+							accessibilityLabel="Fechar adicionar amigo"
+							accessibilityRole="button"
+							onPress={closeModal}
+							style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+						>
+							<View style={styles.closeLineOne} />
+							<View style={styles.closeLineTwo} />
+						</Pressable>
 
-					<LottieView
-						autoPlay
-						loop
-						resizeMode="cover"
-						source={require('@/assets/lotties/friends.json')}
-						style={styles.friendIllustrationAnimation}
-					/>
+						<LottieView
+							autoPlay
+							loop
+							resizeMode="cover"
+							source={require('@/assets/lotties/friends.json')}
+							style={styles.friendIllustrationAnimation}
+							webStyle={{
+								height: compactWebModal ? 72 : 110,
+								marginTop: 4,
+								objectFit: 'contain',
+								width: '100%',
+							}}
+						/>
 
-					<Text style={styles.inputLabel}>Buscar pelo username</Text>
+						<Text style={[styles.inputLabel, compactWebModal && styles.inputLabelCompact]}>
+							Buscar pelo username
+						</Text>
 
-					<TextInput
-						accessibilityLabel="Username do amigo"
-						autoCapitalize="none"
-						autoCorrect={false}
-						onChangeText={(value) => {
-							setQuery(value.replace(/\s/g, ''));
-							setError(null);
-						}}
-						returnKeyType="search"
-						style={styles.friendInput}
-						value={query}
-					/>
+						<TextInput
+							accessibilityLabel="Username do amigo"
+							autoCapitalize="none"
+							autoCorrect={false}
+							onChangeText={(value) => {
+								setQuery(value.replace(/\s/g, ''));
+								setError(null);
+							}}
+							returnKeyType="search"
+							style={styles.friendInput}
+							value={query}
+						/>
 
-					{error ? <Text style={styles.modalError}>{error}</Text> : null}
+						{error ? <Text style={styles.modalError}>{error}</Text> : null}
 
-					<ScrollView
-						keyboardShouldPersistTaps="handled"
-						nestedScrollEnabled
-						showsVerticalScrollIndicator={false}
-						style={styles.resultsList}
-					>
-						{searching ? <ActivityIndicator color="#FFFFFF" style={styles.resultsState} /> : null}
+						<ScrollView
+							keyboardShouldPersistTaps="handled"
+							nestedScrollEnabled
+							showsVerticalScrollIndicator={false}
+							style={[styles.resultsList, compactWebModal && styles.resultsListCompact]}
+						>
+							{searching ? <ActivityIndicator color="#FFFFFF" style={styles.resultsState} /> : null}
 
-						{!searching && searched && visibleResults.length === 0 ? (
-							<Text style={styles.resultsEmpty}>Nenhum usuário encontrado.</Text>
-						) : null}
+							{!searching && searched && visibleResults.length === 0 ? (
+								<Text style={styles.resultsEmpty}>Nenhum usuário encontrado.</Text>
+							) : null}
 
-						{!searching &&
-							visibleResults.map((person) => {
-								const status = statusFor(person);
-								const isAdding = addingId === person.id;
-								const disabled = status !== 'none' || addingId !== null;
-								const label =
-									status === 'friend'
-										? 'Amigos'
-										: status === 'pending'
-											? 'Enviado'
-											: isAdding
-												? '...'
-												: 'Adicionar';
+							{!searching &&
+								visibleResults.map((person) => {
+									const status = statusFor(person);
+									const isAdding = addingId === person.id;
+									const disabled = status !== 'none' || addingId !== null;
+									const label =
+										status === 'friend'
+											? 'Amigos'
+											: status === 'pending'
+												? 'Enviado'
+												: isAdding
+													? '...'
+													: 'Adicionar';
 
-								return (
-									<View key={person.id} style={styles.resultRow}>
-										<View
-											style={[styles.resultAvatar, { backgroundColor: avatarColorFor(person.name) }]}
-										>
-											{person.profileImageUrl ? (
-												<Image
-													contentFit="cover"
-													source={{ uri: person.profileImageUrl }}
-													style={StyleSheet.absoluteFill}
-												/>
-											) : (
-												<Text style={styles.resultAvatarText}>
-													{person.name.charAt(0).toUpperCase()}
+									return (
+										<View key={person.id} style={styles.resultRow}>
+											<View
+												style={[styles.resultAvatar, { backgroundColor: avatarColorFor(person.name) }]}
+											>
+												{person.profileImageUrl ? (
+													<Image
+														contentFit="cover"
+														source={{ uri: person.profileImageUrl }}
+														style={StyleSheet.absoluteFill}
+													/>
+												) : (
+													<Text style={styles.resultAvatarText}>
+														{person.name.charAt(0).toUpperCase()}
+													</Text>
+												)}
+											</View>
+
+											<View style={styles.resultBody}>
+												<Text numberOfLines={1} style={styles.resultName}>
+													{person.name}
 												</Text>
-											)}
-										</View>
+												{person.username ? (
+													<Text numberOfLines={1} style={styles.resultUsername}>
+														@{person.username}
+													</Text>
+												) : null}
+											</View>
 
-										<View style={styles.resultBody}>
-											<Text numberOfLines={1} style={styles.resultName}>
-												{person.name}
-											</Text>
-											{person.username ? (
-												<Text numberOfLines={1} style={styles.resultUsername}>
-													@{person.username}
-												</Text>
-											) : null}
-										</View>
-
-										<Pressable
-											accessibilityLabel={`Adicionar ${person.name}`}
-											accessibilityRole="button"
-											disabled={disabled}
-											onPress={() => handleAdd(person)}
-											style={({ pressed }) => [
-												styles.addResultButton,
-												status !== 'none' && styles.addResultButtonDone,
-												pressed && styles.pressed,
-											]}
-										>
-											<Text
-												style={[
-													styles.addResultText,
-													status !== 'none' && styles.addResultTextDone,
+											<Pressable
+												accessibilityLabel={`Adicionar ${person.name}`}
+												accessibilityRole="button"
+												disabled={disabled}
+												onPress={() => handleAdd(person)}
+												style={({ pressed }) => [
+													styles.addResultButton,
+													status !== 'none' && styles.addResultButtonDone,
+													pressed && styles.pressed,
 												]}
 											>
-												{label}
-											</Text>
-										</Pressable>
-									</View>
-								);
-							})}
-					</ScrollView>
+												<Text
+													style={[
+														styles.addResultText,
+														status !== 'none' && styles.addResultTextDone,
+													]}
+												>
+													{label}
+												</Text>
+											</Pressable>
+										</View>
+									);
+								})}
+						</ScrollView>
+					</View>
 				</View>
 			</KeyboardAvoidingView>
 		</Modal>
@@ -454,6 +533,7 @@ export default function FriendsScreen() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [busyKey, setBusyKey] = useState<string | null>(null);
 	const [error, setError] = useState('');
+	const [interactionDialog, setInteractionDialog] = useState<InteractionDialog | null>(null);
 
 	const load = useCallback(async () => {
 		
@@ -515,33 +595,46 @@ export default function FriendsScreen() {
 			await action();
 			await load();
 		} catch (e) {
-			Alert.alert(errorTitle, messageOf(e, 'Tente novamente.'));
+			setInteractionDialog({
+				title: errorTitle,
+				message: messageOf(e, 'Tente novamente.'),
+				actions: [{ label: 'OK', onPress: () => {} }],
+			});
 		} finally {
 			setBusyKey(null);
 		}
 	};
 
 	const handleBlock = (person: Person) => {
-		Alert.alert('Bloquear usuário', `Você não receberá mais interações de ${person.name}. Deseja continuar?`, [
-			{ text: 'Cancelar', style: 'cancel' },
-			{
-				text: 'Bloquear',
-				style: 'destructive',
-				onPress: () => runAction(`block-${person.id}`, () => blockUser(person.id), 'Não foi possível bloquear'),
-			},
-			{ text: 'Desfazer amizade', onPress: () => handleUnfriend(person) },
-		]);
+		setInteractionDialog({
+			title: 'Bloquear usuário',
+			message: `Você não receberá mais interações de ${person.name}. Deseja continuar?`,
+			actions: [
+				{ label: 'Cancelar', onPress: () => {} },
+				{
+					label: 'Bloquear',
+					destructive: true,
+					onPress: () =>
+						runAction(`block-${person.id}`, () => blockUser(person.id), 'Não foi possível bloquear'),
+				},
+				{ label: 'Desfazer amizade', onPress: () => handleUnfriend(person) },
+			],
+		});
 	};
 
 	const handleUnfriend = (person: Person) => {
-		Alert.alert('Desfazer amizade', `Tem certeza que deseja remover ${person.name} dos seus amigos?`, [
-			{ text: 'Cancelar', style: 'cancel' },
-			{
-				text: 'Remover',
-				style: 'destructive',
-				onPress: () => runAction(`friend-${person.id}`, () => unfriend(person.id), 'Não foi possível remover'),
-			},
-		]);
+		setInteractionDialog({
+			title: 'Desfazer amizade',
+			message: `Tem certeza que deseja remover ${person.name} dos seus amigos?`,
+			actions: [
+				{ label: 'Cancelar', onPress: () => {} },
+				{
+					label: 'Remover',
+					destructive: true,
+					onPress: () => runAction(`friend-${person.id}`, () => unfriend(person.id), 'Não foi possível remover'),
+				},
+			],
+		});
 	};
 
 	const handleAcceptShare = (item: ShareRequest) =>
@@ -549,7 +642,11 @@ export default function FriendsScreen() {
 			`share-${item.id}`,
 			async () => {
 				await acceptShareRequest(item.id);
-				Alert.alert('Deck adicionado', `"${item.deckName}" já está na sua aba Decks.`);
+				setInteractionDialog({
+					title: 'Deck adicionado',
+					message: `"${item.deckName}" já está na sua aba Decks.`,
+					actions: [{ label: 'OK', onPress: () => {} }],
+				});
 			},
 			'Não foi possível aceitar',
 		);
@@ -750,6 +847,10 @@ export default function FriendsScreen() {
 				statusFor={statusFor}
 				visible={isAddFriendVisible}
 			/>
+			<UserInteractionModal
+				dialog={interactionDialog}
+				onClose={() => setInteractionDialog(null)}
+			/>
 		</View>
 	);
 }
@@ -876,6 +977,7 @@ const styles = StyleSheet.create({
 		flex: 1,
 		justifyContent: 'center',
 		padding: 16,
+		width: '100%',
 	},
 	modalDismissArea: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
 	modalCard: {
@@ -888,6 +990,7 @@ const styles = StyleSheet.create({
 		shadowColor: '#000000',
 		shadowOpacity: 0.22,
 		shadowRadius: 12,
+		flexShrink: 1,
 		width: '100%',
 	},
 	modalCircle: {
@@ -898,7 +1001,9 @@ const styles = StyleSheet.create({
 		right: -300,
 		top: -70,
 		width: 520,
+		zIndex: 0,
 	},
+	modalContent: { flexShrink: 1, position: 'relative', zIndex: 1 },
 	closeButton: { height: 28, justifyContent: 'center', width: 28 },
 	closeLineOne: {
 		backgroundColor: '#FFFFFF',
@@ -924,6 +1029,7 @@ const styles = StyleSheet.create({
 		marginTop: 28,
 		textAlign: 'center',
 	},
+	inputLabelCompact: { marginTop: 12 },
 	friendInput: {
 		backgroundColor: '#D9D9D9',
 		borderRadius: 10,
@@ -934,7 +1040,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 12,
 	},
 	modalError: { color: '#FFE3E3', fontSize: 13, fontWeight: '600', marginTop: 8 },
-	resultsList: { marginTop: 12, maxHeight: 220 },
+	resultsList: { flexShrink: 1, marginTop: 12, maxHeight: 220 },
+	resultsListCompact: { maxHeight: 140 },
 	resultsState: { marginVertical: 16 },
 	resultsEmpty: { color: '#DDE6FF', fontSize: 14, marginVertical: 16, textAlign: 'center' },
 	resultRow: { alignItems: 'center', flexDirection: 'row', paddingVertical: 8 },
@@ -964,4 +1071,38 @@ const styles = StyleSheet.create({
 	addResultButtonDone: { backgroundColor: 'rgba(255,255,255,0.25)' },
 	addResultText: { color: '#111111', fontSize: 13, fontWeight: '800' },
 	addResultTextDone: { color: '#FFFFFF' },
+	interactionBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(21, 21, 21, 0.42)',
+		flex: 1,
+		justifyContent: 'center',
+		padding: 16,
+	},
+	interactionCard: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 16,
+		maxWidth: 380,
+		padding: 20,
+		width: '100%',
+	},
+	interactionTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
+	interactionMessage: { color: colors.muted, fontSize: 15, lineHeight: 21, marginTop: 8 },
+	interactionActions: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: 8,
+		justifyContent: 'flex-end',
+		marginTop: 20,
+	},
+	interactionButton: {
+		alignItems: 'center',
+		backgroundColor: '#F0F0F3',
+		borderRadius: 10,
+		justifyContent: 'center',
+		minHeight: 42,
+		paddingHorizontal: 12,
+	},
+	interactionButtonDestructive: { backgroundColor: '#B91B5A' },
+	interactionButtonText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+	interactionButtonTextDestructive: { color: '#FFFFFF' },
 });

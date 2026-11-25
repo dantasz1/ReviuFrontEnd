@@ -1,3 +1,5 @@
+import '@/global.css';
+
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 

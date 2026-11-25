@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useAppViewport } from '@/hooks/use-app-viewport';
 
 import {
     getOnboardingProgress,
@@ -12,7 +14,7 @@ import {
 } from '@/data/onboarding';
 
 export default function OnboardingScreen() {
-  const { width } = useWindowDimensions();
+  const { width } = useAppViewport();
   const [questionIndex, setQuestionIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const question = onboardingQuestions[questionIndex];

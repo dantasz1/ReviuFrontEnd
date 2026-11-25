@@ -5,10 +5,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getUnreadCount } from '../../services/inbox';
 
-export function NotificationBell({ variant = 'blue' }: { variant?: 'blue' | 'white' }) {
+export function NotificationBell({
+	variant = 'blue',
+	interactive = true,
+}: {
+	variant?: 'blue' | 'white';
+	interactive?: boolean;
+}) {
 	const [count, setCount] = useState(0);
 
-	
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
@@ -25,14 +30,8 @@ export function NotificationBell({ variant = 'blue' }: { variant?: 'blue' | 'whi
 		}, []),
 	);
 
-	return (
-		<Pressable
-			accessibilityLabel={count > 0 ? `Notificações, ${count} novas` : 'Notificações'}
-			accessibilityRole="button"
-			hitSlop={12}
-			onPress={() => router.push('/drawer/notifications')}
-			style={styles.button}
-		>
+	const content = (
+		<>
 			<Image
 				contentFit="contain"
 				source={
@@ -47,6 +46,22 @@ export function NotificationBell({ variant = 'blue' }: { variant?: 'blue' | 'whi
 					<Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
 				</View>
 			) : null}
+		</>
+	);
+
+	if (!interactive) {
+		return <View style={styles.button}>{content}</View>;
+	}
+
+	return (
+		<Pressable
+			accessibilityLabel={count > 0 ? `Notificações, ${count} novas` : 'Notificações'}
+			accessibilityRole="button"
+			hitSlop={12}
+			onPress={() => router.push('/drawer/notifications')}
+			style={styles.button}
+		>
+			{content}
 		</Pressable>
 	);
 }

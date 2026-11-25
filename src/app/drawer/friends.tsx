@@ -15,12 +15,12 @@ import {
 	StyleSheet,
 	Text,
 	TextInput,
-	useWindowDimensions,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import {
 	type ShareRequest,
 	USER_NAME_KEY,
@@ -440,7 +440,7 @@ function AddFriendModal({
 
 export default function FriendsScreen() {
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
 	const curveSize = 1400;
 	const searchRef = useRef<ComponentRef<typeof TextInput>>(null);
 

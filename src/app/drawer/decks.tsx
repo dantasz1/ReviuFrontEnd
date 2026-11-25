@@ -16,12 +16,12 @@ import {
 	StyleSheet,
 	Text,
 	TextInput,
-	useWindowDimensions,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import Svg, { Polygon } from 'react-native-svg';
 import {
 	createDeck,
@@ -628,7 +628,7 @@ function DeckOptionsModal({
 export default function DecksScreen() {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
 	const circleSize = 2800;
 	const searchRef = useRef<ComponentRef<typeof TextInput>>(null);
 	const [modalVisible, setModalVisible] = useState(false);

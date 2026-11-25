@@ -2,9 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import { requestPasswordReset } from '../../../services/auth';
 import { USER_NAME_KEY } from '../../../services/decks';
 import { getUserInfo, type UserInfo } from '../../../services/user';
@@ -29,7 +30,7 @@ function avatarColorFor(name: string) {
 
 export default function ProfileScreen() {
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
 	const curveSize = 1400;
 
 	const [info, setInfo] = useState<UserInfo | null>(null);

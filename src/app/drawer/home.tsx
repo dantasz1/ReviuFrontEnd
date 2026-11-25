@@ -4,11 +4,12 @@ import { getCalendars } from 'expo-localization';
 import { router, useFocusEffect } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Polygon } from 'react-native-svg';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import { type Deck, getDecks, getDueCards, USER_NAME_KEY } from '../../../services/decks';
 import { getStats, getUserInfo, type Stats, updateUserTimezone } from '../../../services/user';
 
@@ -141,7 +142,8 @@ function DeckCard({ name, count, color, light, dark, onPress }: DeckCardProps) {
 
 export default function HomeScreen() {
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
+	const streakDaySize = Math.max(0, Math.min(44, (screenW - 84) / 7));
 	const fireRef = useRef<LottieView>(null);
 	const curveSize = 1400;
 
@@ -362,6 +364,7 @@ export default function HomeScreen() {
 								speed={1.5}
 								source={require('@/assets/lotties/Fire animation.json')}
 								style={styles.streakFire}
+								webStyle={{ height: 36, marginLeft: -5, marginRight: 4, width: 36 }}
 							/>
 							<Text style={styles.streakLabel}>Sua ofensiva</Text>
 						</View>
@@ -370,10 +373,14 @@ export default function HomeScreen() {
 
 					<View style={styles.weekRow}>
 						{streakDays.map((day, index) => (
-							<View key={`${day.label}-${index}`} style={styles.weekDay}>
+							<View
+								key={`${day.label}-${index}`}
+								style={[styles.weekDay, Platform.OS === 'web' && styles.weekDayWeb]}
+							>
 								<View
 									style={[
 										styles.dayCircle,
+										Platform.OS === 'web' && { height: streakDaySize, width: streakDaySize },
 										day.completed && styles.dayCircleCompleted,
 										day.isToday && !day.completed && styles.dayCircleToday,
 										!day.completed && !day.isToday && styles.dayCircleFuture,
@@ -502,6 +509,7 @@ const styles = StyleSheet.create({
 	streakCount: { color: '#FFFFFF', fontSize: 26, fontWeight: '900' },
 	weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
 	weekDay: { alignItems: 'center', gap: 8 },
+	weekDayWeb: { flex: 1 },
 	dayCircle: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
 	dayCircleCompleted: { backgroundColor: colors.yellow },
 	dayCircleToday: { borderColor: '#FFFFFF', borderWidth: 3 },

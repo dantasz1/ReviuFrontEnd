@@ -4,11 +4,13 @@ import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAppViewport } from '@/hooks/use-app-viewport';
+
 export default function HomeScreen() {
-  const { width } = useWindowDimensions();
+  const { width } = useAppViewport();
   const contentWidth = Math.min(width - 40, 360);
 
   useEffect(() => {

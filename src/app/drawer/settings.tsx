@@ -13,12 +13,12 @@ import {
 	StyleSheet,
 	Text,
 	TextInput,
-	useWindowDimensions,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import { logout } from '../../../services/auth';
 import { USER_NAME_KEY } from '../../../services/decks';
 
@@ -66,7 +66,7 @@ function confirmLogout(onConfirm: () => void) {
 
 export default function SettingsScreen() {
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
 	const curveSize = 1400;
 	const [userName, setUserName] = useState('');
 	const [supportVisible, setSupportVisible] = useState(false);
@@ -175,7 +175,7 @@ export default function SettingsScreen() {
 						>
 							<Text style={styles.menuText}>{item.label}</Text>
 							{item.showBell && (
-								<NotificationBell variant="white" />
+								<NotificationBell interactive={false} variant="white" />
 							)}
 						</Pressable>
 					))}

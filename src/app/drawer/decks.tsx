@@ -4,7 +4,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
 	ActivityIndicator,
-	Alert,
 	Animated,
 	Keyboard,
 	KeyboardAvoidingView,
@@ -16,12 +15,12 @@ import {
 	StyleSheet,
 	Text,
 	TextInput,
-	useWindowDimensions,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { useAppViewport } from '@/hooks/use-app-viewport';
 import Svg, { Polygon } from 'react-native-svg';
 import {
 	createDeck,
@@ -305,7 +304,14 @@ type DeckOptionsModalProps = {
 	onRename: (deck: Deck, name: string) => Promise<void>;
 	onChangeColor: (deck: Deck, color: string) => Promise<void>;
 	onShare: (deck: Deck, friend: Person) => Promise<void>;
-	onDelete: (deck: Deck) => void;
+	onDelete: (deck: Deck) => Promise<void>;
+};
+
+type Confirmation = {
+	title: string;
+	message: string;
+	confirmLabel: string;
+	onConfirm: () => Promise<void>;
 };
 
 function DeckOptionsModal({
@@ -327,6 +333,7 @@ function DeckOptionsModal({
 	const [loadingFriends, setLoadingFriends] = useState(false);
 	const [sharingId, setSharingId] = useState<number | null>(null);
 	const [sharedWith, setSharedWith] = useState<number[]>([]);
+	const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
 	
 	useEffect(() => {
@@ -341,6 +348,7 @@ function DeckOptionsModal({
 			setFriends([]);
 			setSharingId(null);
 			setSharedWith([]);
+			setConfirmation(null);
 		}, 0);
 
 		return () => clearTimeout(reset);
@@ -408,28 +416,32 @@ function DeckOptionsModal({
 	};
 
 	const confirmShare = (friend: Person) => {
-		Alert.alert(
-			'Compartilhar deck',
-			`Enviar um pedido para ${friend.name} receber uma cópia de "${deck.name}"?`,
-			[
-				{ text: 'Cancelar', style: 'cancel' },
-				{
-					text: 'Enviar pedido',
-					onPress: async () => {
-						setSharingId(friend.id);
-						setError('');
-						try {
-							await onShare(deck, friend);
-							setSharedWith((current) => [...current, friend.id]);
-						} catch (e) {
-							setError(messageOf(e, 'Não foi possível compartilhar o deck.'));
-						} finally {
-							setSharingId(null);
-						}
-					},
-				},
-			],
-		);
+		setConfirmation({
+			title: 'Compartilhar deck',
+			message: `Enviar um pedido para ${friend.name} receber uma cópia de "${deck.name}"?`,
+			confirmLabel: 'Enviar pedido',
+			onConfirm: async () => {
+				setSharingId(friend.id);
+				try {
+					await onShare(deck, friend);
+					setSharedWith((current) => [...current, friend.id]);
+				} finally {
+					setSharingId(null);
+				}
+			},
+		});
+	};
+
+	const runConfirmation = async () => {
+		if (!confirmation) return;
+		const action = confirmation.onConfirm;
+		setConfirmation(null);
+		setError('');
+		try {
+			await action();
+		} catch (e) {
+			setError(messageOf(e, 'Não foi possível concluir a ação.'));
+		}
 	};
 
 	return (
@@ -473,7 +485,14 @@ function DeckOptionsModal({
 
 							<Pressable
 								accessibilityRole="button"
-								onPress={() => onDelete(deck)}
+								onPress={() =>
+									setConfirmation({
+										title: 'Excluir deck',
+										message: `Tem certeza que deseja excluir "${deck.name}"? Todos os cards dele serão apagados.`,
+										confirmLabel: 'Excluir',
+										onConfirm: () => onDelete(deck),
+									})
+								}
 								style={({ pressed }) => [styles.optionButton, pressed && styles.pressed]}
 							>
 								<Text style={[styles.optionText, { color: colors.danger }]}>Excluir deck</Text>
@@ -620,6 +639,40 @@ function DeckOptionsModal({
 						</>
 					)}
 				</View>
+
+				{confirmation ? (
+					<View style={styles.confirmationBackdrop}>
+						<Pressable
+							accessibilityLabel="Cancelar confirmação"
+							onPress={() => setConfirmation(null)}
+							style={StyleSheet.absoluteFill}
+						/>
+						<View accessibilityRole="alert" style={styles.confirmationCard}>
+							<Text style={styles.confirmationTitle}>{confirmation.title}</Text>
+							<Text style={styles.confirmationMessage}>{confirmation.message}</Text>
+							<View style={styles.confirmationActions}>
+								<Pressable
+									accessibilityRole="button"
+									onPress={() => setConfirmation(null)}
+									style={({ pressed }) => [styles.confirmationButton, pressed && styles.pressed]}
+								>
+									<Text style={styles.confirmationCancelText}>Cancelar</Text>
+								</Pressable>
+								<Pressable
+									accessibilityRole="button"
+									onPress={runConfirmation}
+									style={({ pressed }) => [
+										styles.confirmationButton,
+										styles.confirmationButtonPrimary,
+										pressed && styles.pressed,
+									]}
+								>
+									<Text style={styles.confirmationPrimaryText}>{confirmation.confirmLabel}</Text>
+								</Pressable>
+							</View>
+						</View>
+					</View>
+				) : null}
 			</KeyboardAvoidingView>
 		</Modal>
 	);
@@ -628,7 +681,7 @@ function DeckOptionsModal({
 export default function DecksScreen() {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
-	const { height: screenH, width: screenW } = useWindowDimensions();
+	const { height: screenH, width: screenW } = useAppViewport();
 	const circleSize = 2800;
 	const searchRef = useRef<ComponentRef<typeof TextInput>>(null);
 	const [modalVisible, setModalVisible] = useState(false);
@@ -735,28 +788,10 @@ export default function DecksScreen() {
 		}
 	};
 
-	const handleDelete = (deck: Deck) => {
-		Alert.alert(
-			'Excluir deck',
-			`Tem certeza que deseja excluir "${deck.name}"? Todos os cards dele serão apagados.`,
-			[
-				{ text: 'Cancelar', style: 'cancel' },
-				{
-					text: 'Excluir',
-					style: 'destructive',
-					onPress: async () => {
-						try {
-							await deleteDeck(deck.id);
-							setDecks((currentDecks) => currentDecks.filter((item) => item.id !== deck.id));
-							setOptionsDeck(null);
-						} catch (deleteError) {
-							setOptionsDeck(null);
-							setError(messageOf(deleteError, 'Nao foi possivel excluir o deck.'));
-						}
-					},
-				},
-			],
-		);
+	const handleDelete = async (deck: Deck) => {
+		await deleteDeck(deck.id);
+		setDecks((currentDecks) => currentDecks.filter((item) => item.id !== deck.id));
+		setOptionsDeck(null);
 	};
 
 	const query = normalize(search);
@@ -1116,6 +1151,45 @@ const styles = StyleSheet.create({
 		padding: 20,
 		width: '100%',
 	},
+	confirmationBackdrop: {
+		alignItems: 'center',
+		backgroundColor: 'rgba(17, 17, 17, 0.42)',
+		bottom: 0,
+		justifyContent: 'center',
+		left: 0,
+		padding: 16,
+		position: 'absolute',
+		right: 0,
+		top: 0,
+		zIndex: 2,
+	},
+	confirmationCard: {
+		backgroundColor: '#FFFFFF',
+		borderRadius: 16,
+		maxWidth: 360,
+		padding: 20,
+		width: '100%',
+	},
+	confirmationTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
+	confirmationMessage: { color: colors.muted, fontSize: 15, lineHeight: 21, marginTop: 8 },
+	confirmationActions: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: 8,
+		justifyContent: 'flex-end',
+		marginTop: 20,
+	},
+	confirmationButton: {
+		alignItems: 'center',
+		backgroundColor: colors.lilac,
+		borderRadius: 10,
+		justifyContent: 'center',
+		minHeight: 42,
+		paddingHorizontal: 14,
+	},
+	confirmationButtonPrimary: { backgroundColor: colors.danger },
+	confirmationCancelText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+	confirmationPrimaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 	optionsTitle: { color: colors.ink, fontSize: 22, fontWeight: '900' },
 	optionsLabel: { color: colors.muted, fontSize: 14, fontWeight: '700', marginTop: 16 },
 	optionsError: { color: colors.danger, fontSize: 13, marginTop: 10 },

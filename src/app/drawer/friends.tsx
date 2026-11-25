@@ -336,10 +336,10 @@ function AddFriendModal({
 						style={styles.friendIllustrationAnimation}
 					/>
 
-					<Text style={styles.inputLabel}>Buscar pelo username</Text>
+					<Text style={styles.inputLabel}>Buscar pelo nome de usuário</Text>
 
 					<TextInput
-						accessibilityLabel="Username do amigo"
+						accessibilityLabel="Nome de usuário do amigo"
 						autoCapitalize="none"
 						autoCorrect={false}
 						onChangeText={(value) => {
@@ -725,7 +725,7 @@ export default function FriendsScreen() {
 
 				{!loading && !error && friends.length === 0 ? (
 					<Text style={[styles.stateBlock, styles.stateText]}>
-						Você ainda não tem amigos. Toque no + para adicionar alguém pelo username.
+						Você ainda não tem amigos. Toque no + para adicionar alguém pelo nome de usuário.
 					</Text>
 				) : null}
 

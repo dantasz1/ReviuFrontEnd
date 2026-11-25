@@ -397,84 +397,6 @@ function AddFriendModal({
 							<View style={styles.closeLineOne} />
 							<View style={styles.closeLineTwo} />
 						</Pressable>
-					<Pressable
-						accessibilityLabel="Fechar adicionar amigo"
-						accessibilityRole="button"
-						onPress={closeModal}
-						style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-					>
-						<View style={styles.closeLineOne} />
-						<View style={styles.closeLineTwo} />
-					</Pressable>
-
-					<LottieView
-						autoPlay
-						loop
-						resizeMode="cover"
-						source={require('@/assets/lotties/friends.json')}
-						style={styles.friendIllustrationAnimation}
-					/>
-
-					<Text style={styles.inputLabel}>Buscar pelo nome de usuário</Text>
-
-					<TextInput
-						accessibilityLabel="Nome de usuário do amigo"
-						autoCapitalize="none"
-						autoCorrect={false}
-						onChangeText={(value) => {
-							setQuery(value.replace(/\s/g, ''));
-							setError(null);
-						}}
-						returnKeyType="search"
-						style={styles.friendInput}
-						value={query}
-					/>
-
-					{error ? <Text style={styles.modalError}>{error}</Text> : null}
-
-					<ScrollView
-						keyboardShouldPersistTaps="handled"
-						nestedScrollEnabled
-						showsVerticalScrollIndicator={false}
-						style={styles.resultsList}
-					>
-						{searching ? <ActivityIndicator color="#FFFFFF" style={styles.resultsState} /> : null}
-
-						{!searching && searched && visibleResults.length === 0 ? (
-							<Text style={styles.resultsEmpty}>Nenhum usuário encontrado.</Text>
-						) : null}
-
-						{!searching &&
-							visibleResults.map((person) => {
-								const status = statusFor(person);
-								const isAdding = addingId === person.id;
-								const disabled = status !== 'none' || addingId !== null;
-								const label =
-									status === 'friend'
-										? 'Amigos'
-										: status === 'pending'
-											? 'Enviado'
-											: isAdding
-												? '...'
-												: 'Adicionar';
-
-								return (
-									<View key={person.id} style={styles.resultRow}>
-										<View
-											style={[styles.resultAvatar, { backgroundColor: avatarColorFor(person.name) }]}
-										>
-											{person.profileImageUrl ? (
-												<Image
-													contentFit="cover"
-													source={{ uri: person.profileImageUrl }}
-													style={StyleSheet.absoluteFill}
-												/>
-											) : (
-												<Text style={styles.resultAvatarText}>
-													{person.name.charAt(0).toUpperCase()}
-												</Text>
-											)}
-										</View>
 
 						<LottieView
 							autoPlay
@@ -491,11 +413,11 @@ function AddFriendModal({
 						/>
 
 						<Text style={[styles.inputLabel, compactWebModal && styles.inputLabelCompact]}>
-							Buscar pelo username
+							Buscar pelo nome de usuário
 						</Text>
 
 						<TextInput
-							accessibilityLabel="Username do amigo"
+							accessibilityLabel="Nome de usuário do amigo"
 							autoCapitalize="none"
 							autoCorrect={false}
 							onChangeText={(value) => {
